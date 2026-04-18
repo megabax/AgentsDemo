@@ -35,4 +35,7 @@ screenshots/
 models/
 checkpoints/
 
+# Files
+*.png
+
 info.txt

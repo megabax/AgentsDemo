@@ -1,5 +1,10 @@
 """Общие константы игры."""
 
+import os
+
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PLAYER_SPRITE_PATH = os.path.join(_BASE_DIR, "images", "cow.png")
+
 WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 600
 FPS = 60

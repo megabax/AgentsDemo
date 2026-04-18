@@ -5,7 +5,8 @@ import pygame
 from config import (
     PLAYER_SIZE,
     PLAYER_SPEED,
-    RED,
+    PLAYER_SPRITE_PATH,
+    WHITE,
     WINDOW_HEIGHT,
     WINDOW_WIDTH,
 )
@@ -18,6 +19,10 @@ class Player:
         self.size = PLAYER_SIZE
         self.rect = pygame.Rect(x, y, self.size, self.size)
         self.score = 0
+
+        img = pygame.image.load(PLAYER_SPRITE_PATH).convert()
+        img.set_colorkey(WHITE)
+        self.image = pygame.transform.smoothscale(img, (self.size, self.size))
 
     def update(self, action):
         """
@@ -41,7 +46,7 @@ class Player:
         self.rect.topleft = (self.x, self.y)
 
     def draw(self, screen):
-        pygame.draw.rect(screen, RED, self.rect)
+        screen.blit(self.image, self.rect)
 
     def get_state(self, targets):
         """
