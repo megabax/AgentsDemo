@@ -15,3 +15,7 @@ PLAYER_SPEED = 5
 
 TARGET_SIZE = 30
 TARGET_COUNT = 5
+
+# Режим управления: CONTROL_AI — класс Player и ИИ-агент; CONTROL_KEYBOARD — KeyboardPlayer и стрелки
+CONTROL_AI = "ai"
+CONTROL_KEYBOARD = "keyboard"

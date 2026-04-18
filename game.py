@@ -8,6 +8,8 @@ import pygame
 from config import (
     BLACK,
     BLUE,
+    CONTROL_AI,
+    CONTROL_KEYBOARD,
     FPS,
     TARGET_COUNT,
     TARGET_SIZE,
@@ -17,12 +19,14 @@ from config import (
     WINDOW_WIDTH,
 )
 from dummy_agent import DummyAgent
+from keyboard_player import KeyboardPlayer
 from player import Player
 from target import Target
 
 
 class Game:
-    def __init__(self):
+    def __init__(self, control_mode=CONTROL_AI):
+        self.control_mode = control_mode
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption("ИИ-агент vs Игра (шаблон)")
         self.clock = pygame.time.Clock()
@@ -32,7 +36,10 @@ class Game:
     def reset(self):
         player_x = WINDOW_WIDTH // 2 - PLAYER_SIZE // 2
         player_y = WINDOW_HEIGHT // 2 - PLAYER_SIZE // 2
-        self.player = Player(player_x, player_y)
+        if self.control_mode == CONTROL_KEYBOARD:
+            self.player = KeyboardPlayer(player_x, player_y)
+        else:
+            self.player = Player(player_x, player_y)
 
         self.targets = []
         for _ in range(TARGET_COUNT):
@@ -61,7 +68,10 @@ class Game:
         score_text = self.font.render(f"Score: {self.player.score}", True, BLACK)
         self.screen.blit(score_text, (10, 10))
 
-        info_text = self.font.render("AI Agent Placeholder (random movement)", True, BLUE)
+        if self.control_mode == CONTROL_KEYBOARD:
+            info_text = self.font.render("Arrow keys — move", True, BLUE)
+        else:
+            info_text = self.font.render("AI Agent Placeholder (random movement)", True, BLUE)
         self.screen.blit(info_text, (10, WINDOW_HEIGHT - 40))
 
     def draw(self):
@@ -91,6 +101,9 @@ class Game:
         return state, reward, done
 
     def run_with_ai(self, agent=None):
+        if self.control_mode != CONTROL_AI:
+            raise ValueError("run_with_ai только при control_mode=CONTROL_AI (класс Player).")
+
         if agent is None:
             agent = DummyAgent()
 
@@ -115,3 +128,23 @@ class Game:
             self.clock.tick(FPS)
 
             pygame.time.delay(30)
+
+    def run_keyboard(self):
+        """Игра с управлением стрелками (класс KeyboardPlayer)."""
+        if self.control_mode != CONTROL_KEYBOARD:
+            raise ValueError("run_keyboard только при control_mode=CONTROL_KEYBOARD.")
+
+        self.reset()
+
+        while self.running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                    pygame.quit()
+                    sys.exit()
+
+            self.player.update_from_keys()
+            self.check_collisions()
+
+            self.draw()
+            self.clock.tick(FPS)
