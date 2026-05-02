@@ -37,5 +37,6 @@ checkpoints/
 
 # Files
 *.png
+!images/cow.png
 
 info.txt
