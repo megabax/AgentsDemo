@@ -24,3 +24,11 @@ TARGET_COUNT = 5
 # Режим управления: CONTROL_AI — класс Player и ИИ-агент; CONTROL_KEYBOARD — KeyboardPlayer и стрелки
 CONTROL_AI = "ai"
 CONTROL_KEYBOARD = "keyboard"
+
+# Режимы проверки границ
+BOUNDARY_MODE_BOUNCE = 0      # Отскок от стен (меняет направление)
+BOUNDARY_MODE_WRAP = 1        # Телепортация (появляется с противоположной стороны)
+
+
+# Выберите режим (по умолчанию - отскок)
+BOUNDARY_MODE = BOUNDARY_MODE_BOUNCE
