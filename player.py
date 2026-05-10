@@ -40,6 +40,10 @@ class Player:
         elif action == 4:  # стоять
             pass
 
+        # Новая логика А:
+        if self.rect.left < 0 or self.rect.right > WINDOW_WIDTH:
+            self.speed_x *= -1  # отскок от стен
+
         self.x = max(0, min(WINDOW_WIDTH - self.size, self.x))
         self.y = max(0, min(WINDOW_HEIGHT - self.size, self.y))
 
