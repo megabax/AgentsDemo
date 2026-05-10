@@ -40,6 +40,12 @@ class Player:
         elif action == 4:  # стоять
             pass
 
+        # Новая логика Б:
+        if self.rect.right > WINDOW_WIDTH:
+            self.rect.x = 0  # телепортация налево
+        if self.rect.left < 0:
+            self.rect.x = WINDOW_WIDTH - PLAYER_SIZE  # телепортация направо
+
         self.x = max(0, min(WINDOW_WIDTH - self.size, self.x))
         self.y = max(0, min(WINDOW_HEIGHT - self.size, self.y))
 
