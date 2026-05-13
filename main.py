@@ -11,7 +11,7 @@ from dummy_agent import DummyAgent
 from game import Game
 
 # Смените на CONTROL_AI для управления через класс Player и агента-заглушку
-CONTROL_MODE = CONTROL_KEYBOARD
+CONTROL_MODE = CONTROL_AI #CONTROL_KEYBOARD
 
 
 def main():
