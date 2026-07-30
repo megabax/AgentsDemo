@@ -18,7 +18,7 @@ from config import (
     WINDOW_HEIGHT,
     WINDOW_WIDTH,
 )
-from dummy_agent import DummyAgent
+from agents import DummyAgent
 from keyboard_player import KeyboardPlayer
 from player import Player
 from target import Target

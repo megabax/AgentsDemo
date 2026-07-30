@@ -2,28 +2,11 @@
 
 import pygame
 
-from config import (
-    PLAYER_SIZE,
-    PLAYER_SPEED,
-    PLAYER_SPRITE_PATH,
-    WHITE,
-    WINDOW_HEIGHT,
-    WINDOW_WIDTH,
-)
+from config import PLAYER_SPEED
+from player import BasePlayer
 
 
-class KeyboardPlayer:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.size = PLAYER_SIZE
-        self.rect = pygame.Rect(x, y, self.size, self.size)
-        self.score = 0
-
-        img = pygame.image.load(PLAYER_SPRITE_PATH).convert()
-        img.set_colorkey(WHITE)
-        self.image = pygame.transform.smoothscale(img, (self.size, self.size))
-
+class KeyboardPlayer(BasePlayer):
     def update_from_keys(self):
         """Движение по зажатым стрелкам (можно по диагонали)."""
         keys = pygame.key.get_pressed()
@@ -36,19 +19,4 @@ class KeyboardPlayer:
         if keys[pygame.K_RIGHT]:
             self.x += PLAYER_SPEED
 
-        self.x = max(0, min(WINDOW_WIDTH - self.size, self.x))
-        self.y = max(0, min(WINDOW_HEIGHT - self.size, self.y))
-
-        self.rect.topleft = (self.x, self.y)
-
-    def draw(self, screen):
-        screen.blit(self.image, self.rect)
-
-    def get_state(self, targets):
-        player_pos = (self.x, self.y)
-        targets_pos = [(t.x, t.y) for t in targets]
-        return {
-            "player_pos": player_pos,
-            "targets_pos": targets_pos,
-            "score": self.score,
-        }
+        self._apply_bounds()

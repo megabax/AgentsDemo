@@ -1,10 +1,5 @@
 """Общие константы игры."""
 
-import os
-
-_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PLAYER_SPRITE_PATH = os.path.join(_BASE_DIR, "images", "cow.png")
-
 WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 600
 FPS = 60
@@ -15,10 +10,9 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 BLACK = (0, 0, 0)
 
-PLAYER_SIZE = 40
-PLAYER_SPEED = 5
-
 TARGET_SIZE = 30
+PLAYER_SIZE = TARGET_SIZE
+PLAYER_SPEED = 5
 TARGET_COUNT = 5
 
 # Режим управления: CONTROL_AI — класс Player и ИИ-агент; CONTROL_KEYBOARD — KeyboardPlayer и стрелки
@@ -26,7 +20,7 @@ CONTROL_AI = "ai"
 CONTROL_KEYBOARD = "keyboard"
 
 # Режимы проверки границ
-BOUNDARY_MODE_BOUNCE = 0      # Отскок от стен (меняет направление)
+BOUNDARY_MODE_BOUNCE = 0      # Останов у края (без скорости направления)
 BOUNDARY_MODE_WRAP = 1        # Телепортация (появляется с противоположной стороны)
 
 

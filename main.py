@@ -1,17 +1,17 @@
 """
 Простой шаблон проекта для ИИ-агента в компьютерной игре.
-Игра: управление спрайтом коровы, который должен собирать зелёные цели.
+Игра: управление красным квадратом, который должен собирать зелёные цели.
 Агент-заглушка: просто двигается случайным образом.
 """
 
 import pygame
 
 from config import CONTROL_AI, CONTROL_KEYBOARD
-from dummy_agent import DummyAgent
+from agents import DummyAgent
 from game import Game
 
 # Смените на CONTROL_AI для управления через класс Player и агента-заглушку
-CONTROL_MODE = CONTROL_AI #CONTROL_KEYBOARD
+CONTROL_MODE = CONTROL_KEYBOARD
 
 
 def main():
