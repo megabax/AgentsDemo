@@ -26,3 +26,10 @@ BOUNDARY_MODE_WRAP = 1        # Телепортация (появляется �
 
 # Выберите режим (по умолчанию - отскок)
 BOUNDARY_MODE = BOUNDARY_MODE_BOUNCE
+
+# Радар (зрение игрока)
+RADAR_RAY_COUNT = 180
+RADAR_MAX_RANGE = 1200  # покрывает диагональ окна
+RADAR_STEP = 2
+RADAR_VIEW_WIDTH = 640
+RADAR_VIEW_HEIGHT = 480
