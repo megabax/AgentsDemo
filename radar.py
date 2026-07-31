@@ -18,6 +18,9 @@ class Radar:
     Обходит полный круг лучами из центра игрока.
     На каждый луч: расстояние до первого попадания и цвет объекта.
     Target -> зелёный, граница окна (стена) -> белый, пустота -> чёрный.
+
+    Интенсивность цвета падает как (1 − d/R)², где R — диагональ поля
+    (дальность зрения). На R сигнал обнуляется; ближе — ярче.
     """
 
     def __init__(
@@ -31,6 +34,25 @@ class Radar:
         self.step = step
         self.distances = [max_range] * ray_count
         self.colors = [(0, 0, 0)] * ray_count
+
+    def _intensity(self, distance):
+        """
+        Квадратичное затухание (1 − d/R)².
+
+        Чистый закон 1/r² слишком резко гасит сигнал на пиксельной шкале:
+        уже на десятках пикселей цвет был бы почти чёрным.
+        (1 − d/R)² быстрее линейного (как энергия), и на дальности
+        зрения R (диагональ поля) интенсивность точно равна нулю.
+        """
+        R = float(self.max_range)
+        if R <= 0:
+            return 0.0
+        t = min(1.0, max(0.0, float(distance) / R))
+        return (1.0 - t) ** 2
+
+    def _attenuate(self, color, distance):
+        intensity = self._intensity(distance)
+        return tuple(int(channel * intensity) for channel in color)
 
     def scan(self, origin_x, origin_y, targets):
         """Полный обход 360°; origin — центр игрока."""
@@ -62,7 +84,7 @@ class Radar:
                     break
 
             self.distances[i] = hit_dist
-            self.colors[i] = hit_color
+            self.colors[i] = self._attenuate(hit_color, hit_dist)
 
     def as_dict(self):
         """Снимок показаний для будущего state агента."""

@@ -29,7 +29,8 @@ BOUNDARY_MODE = BOUNDARY_MODE_BOUNCE
 
 # Радар (зрение игрока)
 RADAR_RAY_COUNT = 180
-RADAR_MAX_RANGE = 1200  # покрывает диагональ окна
+# Дальность зрения = диагональ поля; на ней интенсивность → 0
+RADAR_MAX_RANGE = int((WINDOW_WIDTH**2 + WINDOW_HEIGHT**2) ** 0.5)
 RADAR_STEP = 2
 RADAR_VIEW_WIDTH = 640
 RADAR_VIEW_HEIGHT = 480
