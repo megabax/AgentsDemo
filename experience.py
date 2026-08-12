@@ -1,8 +1,11 @@
-"""Хранение истории: радар, действия агента, получение еды."""
+"""Хранение истории: радар, действия, еда и попытки (эпизоды) с отложенным исходом."""
 
 from collections import deque
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Deque, Iterable, List, Optional, Tuple
+
+from config import ATTEMPT_MAX_STEPS
 
 
 Color = Tuple[int, int, int]
@@ -44,9 +47,94 @@ class ExperienceStep:
     food_count: int = 0  # сколько еды съедено на шаге (обычно 0 или 1)
 
 
+class AttemptOutcome(Enum):
+    """Итог попытки дойти до еды за несколько шагов."""
+
+    SUCCESS = "success"  # дошёл до еды
+    FAILURE = "failure"  # не дошёл (таймаут / отказ)
+    ABORTED = "aborted"  # попытка прервана снаружи
+    PENDING = "pending"  # ещё идёт
+
+
+@dataclass
+class Attempt:
+    """
+    Попытка: серия шагов от решения «куда идти» до исхода.
+    Обучение смотрит на attempt целиком, а не на один кадр.
+    """
+
+    attempt_index: int
+    max_steps: int = ATTEMPT_MAX_STEPS
+    # Гипотеза направления по радару в начале попытки (заглушка: индекс луча / код действия)
+    intended_direction: Optional[int] = None
+    initial_radar: Optional[RadarReading] = None
+    steps: List[ExperienceStep] = field(default_factory=list)
+    outcome: AttemptOutcome = AttemptOutcome.PENDING
+
+    @property
+    def is_open(self) -> bool:
+        return self.outcome == AttemptOutcome.PENDING
+
+    @property
+    def length(self) -> int:
+        return len(self.steps)
+
+    def add_step(self, step: ExperienceStep) -> None:
+        if not self.is_open:
+            raise RuntimeError("Нельзя добавлять шаги в закрытую попытку")
+        self.steps.append(step)
+
+    def close(self, outcome: AttemptOutcome) -> None:
+        if outcome == AttemptOutcome.PENDING:
+            raise ValueError("Исход PENDING недопустим при закрытии")
+        if not self.is_open:
+            raise RuntimeError("Попытка уже закрыта")
+        self.outcome = outcome
+
+    def success(self) -> bool:
+        return self.outcome == AttemptOutcome.SUCCESS
+
+
+@dataclass
+class AttemptHistory:
+    """Журнал закрытых попыток (для обучения с отложенным исходом)."""
+
+    max_size: Optional[int] = None
+    _attempts: Deque[Attempt] = field(default_factory=deque, init=False)
+
+    def __post_init__(self):
+        if self.max_size is not None:
+            self._attempts = deque(maxlen=self.max_size)
+
+    def __len__(self) -> int:
+        return len(self._attempts)
+
+    def clear(self) -> None:
+        self._attempts.clear()
+
+    def add(self, attempt: Attempt) -> None:
+        if attempt.is_open:
+            raise ValueError("В историю кладут только закрытые попытки")
+        self._attempts.append(attempt)
+
+    def all(self) -> List[Attempt]:
+        return list(self._attempts)
+
+    def recent(self, n: int) -> List[Attempt]:
+        if n <= 0:
+            return []
+        return list(self._attempts)[-n:]
+
+    def successes(self) -> List[Attempt]:
+        return [a for a in self._attempts if a.outcome == AttemptOutcome.SUCCESS]
+
+    def failures(self) -> List[Attempt]:
+        return [a for a in self._attempts if a.outcome == AttemptOutcome.FAILURE]
+
+
 @dataclass
 class ExperienceHistory:
-    """История показаний радара, действий и фактов получения еды."""
+    """История показаний радара, действий и фактов получения еды (покадровая)."""
 
     max_size: Optional[int] = None
     _steps: Deque[ExperienceStep] = field(default_factory=deque, init=False)

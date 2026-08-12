@@ -34,3 +34,6 @@ RADAR_MAX_RANGE = int((WINDOW_WIDTH**2 + WINDOW_HEIGHT**2) ** 0.5)
 RADAR_STEP = 2
 RADAR_VIEW_WIDTH = 640
 RADAR_VIEW_HEIGHT = 480
+
+# Попытка найти еду: лимит шагов до исхода «не дошёл»
+ATTEMPT_MAX_STEPS = 200

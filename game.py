@@ -158,8 +158,7 @@ class Game:
                 food_gained=food_count > 0,
                 food_count=food_count,
             )
-            # обучение-заглушка; реальная логика появится позже
-            agent.learn()
+            # покадровый learn — заглушка; основное обучение — в on_attempt_end
 
             self.draw()
             self.clock.tick(FPS)
