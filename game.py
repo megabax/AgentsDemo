@@ -18,7 +18,9 @@ from config import (
     WINDOW_HEIGHT,
     WINDOW_WIDTH,
 )
-from agents import DummyAgent
+from agents import BaseAgent, DummyAgent
+from engine import AgentEngine
+from experience import RadarReading
 from keyboard_player import KeyboardPlayer
 from player import Player
 from radar_view import RadarView
@@ -33,6 +35,7 @@ class Game:
         self.radar_view = RadarView()
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, 36)
+        self.engine = None
         self.reset()
 
     def reset(self):
@@ -40,8 +43,10 @@ class Game:
         player_y = WINDOW_HEIGHT // 2 - PLAYER_SIZE // 2
         if self.control_mode == CONTROL_KEYBOARD:
             self.player = KeyboardPlayer(player_x, player_y)
+            self.engine = None
         else:
             self.player = Player(player_x, player_y)
+            self.engine = AgentEngine(self.player)
 
         self.targets = []
         for _ in range(TARGET_COUNT):
@@ -60,11 +65,15 @@ class Game:
                 break
 
     def check_collisions(self):
+        """Проверка еды. Возвращает число съеденных целей на этом шаге."""
+        food_count = 0
         for target in self.targets[:]:
             if self.player.rect.colliderect(target.rect):
                 self.targets.remove(target)
                 self.player.score += 1
+                food_count += 1
                 self._add_random_target()
+        return food_count
 
     def draw_ui(self):
         score_text = self.font.render(f"Score: {self.player.score}", True, BLACK)
@@ -104,17 +113,25 @@ class Game:
     def _update_radar(self):
         self.player.scan_radar(self.targets)
 
+    def _current_radar_reading(self) -> RadarReading:
+        return RadarReading.from_radar(self.player.radar)
+
     def step(self, action):
-        old_score = self.player.score
-        self.player.update(action)
-        self.check_collisions()
+        """
+        Один шаг среды: движок двигает агента, затем еда и радар.
+        Возвращает (state, food_count, done).
+        """
+        if self.engine is None:
+            raise RuntimeError("step() доступен только в режиме CONTROL_AI")
+
+        self.engine.execute(action)
+        food_count = self.check_collisions()
         self._update_radar()
-        reward = self.player.score - old_score
         done = False
         state = self.player.get_state(self.targets)
-        return state, reward, done
+        return state, food_count, done
 
-    def run_with_ai(self, agent=None):
+    def run_with_ai(self, agent: BaseAgent = None):
         if self.control_mode != CONTROL_AI:
             raise ValueError("run_with_ai только при control_mode=CONTROL_AI (класс Player).")
 
@@ -122,14 +139,28 @@ class Game:
             agent = DummyAgent()
 
         self.reset()
+        agent.reset()
+        self.engine.bind(self.player)
         self._update_radar()
 
         while self.running:
             self._handle_events()
+
+            radar_before = self._current_radar_reading()
             state = self.player.get_state(self.targets)
-            action = agent.act(state)
-            next_state, reward, done = self.step(action)
-            agent.learn(state, action, reward, next_state, done)
+            action = agent.act(radar_before, state)
+
+            _next_state, food_count, _done = self.step(action)
+
+            agent.observe(
+                radar=radar_before,
+                action=action,
+                food_gained=food_count > 0,
+                food_count=food_count,
+            )
+            # обучение-заглушка; реальная логика появится позже
+            agent.learn()
+
             self.draw()
             self.clock.tick(FPS)
             pygame.time.delay(30)

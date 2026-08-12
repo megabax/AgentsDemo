@@ -1,17 +1,20 @@
 """
 Простой шаблон проекта для ИИ-агента в компьютерной игре.
 Игра: управление красным квадратом, который должен собирать зелёные цели.
-Агент-заглушка: просто двигается случайным образом.
+Инфраструктура ИИ: радар → история опыта → движок движения (обучение пока заглушка).
 """
 
 import pygame
 
 from config import CONTROL_AI, CONTROL_KEYBOARD
-from agents import DummyAgent
+from agents import DummyAgent, RadarFoodAgent
 from game import Game
 
-# Смените на CONTROL_AI для управления через класс Player и агента-заглушку
-CONTROL_MODE = CONTROL_KEYBOARD
+# Смените на CONTROL_KEYBOARD для ручного управления
+CONTROL_MODE = CONTROL_AI
+
+# DummyAgent — случайные ходы; RadarFoodAgent — заглушка будущего ИИ по радару
+AGENT_CLASS = RadarFoodAgent #DummyAgent
 
 
 def main():
@@ -21,8 +24,8 @@ def main():
     if CONTROL_MODE == CONTROL_KEYBOARD:
         game.run_keyboard()
     else:
-        dummy_ai = DummyAgent()
-        game.run_with_ai(dummy_ai)
+        agent = AGENT_CLASS()
+        game.run_with_ai(agent)
 
 
 if __name__ == "__main__":
