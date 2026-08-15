@@ -1,18 +1,17 @@
-"""Агенты ИИ: случайные, заглушки и нейросетевой контроллер с переобучением."""
+"""Агенты ИИ: опыт, попытки; NeuralFoodAgent + диспетчер режимов."""
 
 import random
-from enum import Enum
 from typing import Optional
 
 from config import (
     ATTEMPT_MAX_STEPS,
-    EVAL_MIN_SAMPLES,
     EXPERIENCE_KEEP_FRACTION,
-    TRAIN_EVERY_N_NEURAL_FOODS,
-    TRAIN_MIN_SUCCESS_STEPS,
+    HISTORY_LEN,
+    TRAIN_EVERY_N_FOODS,
+    TRAIN_MIN_SAMPLES,
 )
+from dispatcher import ControllerMode, ModeDispatcher
 from engine import ALL_ACTIONS, ACTION_STAY
-from evaluator import PerformanceEvaluator
 from experience import (
     Attempt,
     AttemptHistory,
@@ -21,20 +20,11 @@ from experience import (
     ExperienceStep,
     RadarReading,
 )
-from nn_model import FoodPolicyNetwork
-
-
-class ControllerMode(str, Enum):
-    NEURAL = "neural"
-    RANDOM = "random"
-    TRAINING = "training"
+from nn_model import FoodPolicyNetwork, attempts_to_dataset, history_features_from_steps
 
 
 class BaseAgent:
-    """
-    Каркас агента: идёт к еде по радару через попытки (несколько шагов → исход).
-    Покадровый опыт + журнал закрытых Attempt.
-    """
+    """Каркас: радар → попытки → опыт."""
 
     def __init__(
         self,
@@ -143,119 +133,103 @@ class BaseAgent:
 
 
 class DummyAgent(BaseAgent):
-    """Случайные действия, без обучения."""
-
     def act(self, radar: RadarReading, state: Optional[dict] = None) -> int:
         self.controller_mode = ControllerMode.RANDOM
         return random.choice(ALL_ACTIONS)
 
-    def learn_from_attempt(self, attempt: Attempt) -> None:
-        pass
-
 
 class RadarFoodAgent(BaseAgent):
-    """Старая заглушка: всегда стоит."""
-
     def act(self, radar: RadarReading, state: Optional[dict] = None) -> int:
         return ACTION_STAY
-
-    def learn_from_attempt(self, attempt: Attempt) -> None:
-        pass
 
 
 class NeuralFoodAgent(BaseAgent):
     """
-    Нейросеть управляет движком; при плохой оценке — случайное блуждание.
-    Опыт пишется всегда. Дообучение:
-      — после еды в random (если хватает успешных шагов);
-      — периодически после еды в neural (каждые TRAIN_EVERY_N_NEURAL_FOODS).
-    После обучения — частичная очистка буфера и режим neural.
+    Движком управляет ModeDispatcher (random ↔ neural).
+    Опыт пишется всегда. Обучение на +/− попытках с историей HISTORY_LEN шагов.
     """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.network = FoodPolicyNetwork()
-        self.evaluator = PerformanceEvaluator()
-        self.controller_mode = ControllerMode.RANDOM
+        self.dispatcher = ModeDispatcher(self.network)
+        self.controller_mode = self.dispatcher.mode
         self.food_total = 0
-        self.random_foods = 0
-        self.neural_foods_since_train = 0
+        self.foods_since_train = 0
         self.cleanup_count = 0
         self.last_cleanup_removed = 0
         self.last_train_samples = 0
+        self.last_switch_reason = "-"
         self._pending_train = False
+        self._cached_samples = 0
 
     def reset(self) -> None:
         super().reset()
-        self.evaluator.reset()
-        self.controller_mode = ControllerMode.RANDOM
+        self.dispatcher.reset()
+        self.controller_mode = self.dispatcher.mode
         self.food_total = 0
-        self.random_foods = 0
-        self.neural_foods_since_train = 0
+        self.foods_since_train = 0
         self.cleanup_count = 0
         self.last_cleanup_removed = 0
         self.last_train_samples = 0
+        self.last_switch_reason = "-"
         self._pending_train = False
+        self._cached_samples = 0
+
+    def _sync_mode(self) -> None:
+        self.controller_mode = self.dispatcher.mode
 
     def act(self, radar: RadarReading, state: Optional[dict] = None) -> int:
-        if self.controller_mode == ControllerMode.TRAINING:
-            return random.choice(ALL_ACTIONS)
-
-        if self.controller_mode == ControllerMode.NEURAL and self.network.is_trained:
-            return self.network.predict_action(radar)
-
-        self.controller_mode = ControllerMode.RANDOM
-        return random.choice(ALL_ACTIONS)
+        past = self.history.recent(HISTORY_LEN - 1)
+        features = history_features_from_steps(past, radar, HISTORY_LEN)
+        action = self.dispatcher.choose_action(features)
+        self._sync_mode()
+        return action
 
     def learn_from_attempt(self, attempt: Attempt) -> None:
+        switch = self.dispatcher.on_attempt_end(attempt)
+        if switch:
+            self.last_switch_reason = switch
+        self._sync_mode()
+        self._cached_samples = self._sample_count()
+
         if attempt.outcome == AttemptOutcome.SUCCESS:
             self.food_total += 1
-            if attempt.source_mode == ControllerMode.RANDOM.value:
-                self.random_foods += 1
-                self._maybe_request_training(reason="random_food")
-            elif attempt.source_mode == ControllerMode.NEURAL.value:
-                self.neural_foods_since_train += 1
-                if self.neural_foods_since_train >= TRAIN_EVERY_N_NEURAL_FOODS:
-                    self._maybe_request_training(reason="neural_food")
+            self.foods_since_train += 1
+            if self.foods_since_train >= TRAIN_EVERY_N_FOODS:
+                self._maybe_request_training()
 
-        if attempt.source_mode == ControllerMode.NEURAL.value:
-            self.evaluator.record_attempt(attempt)
-            if self.evaluator.should_switch_to_random():
-                self.controller_mode = ControllerMode.RANDOM
+        if attempt.outcome == AttemptOutcome.FAILURE:
+            if self._cached_samples >= TRAIN_MIN_SAMPLES and self.foods_since_train > 0:
+                self._maybe_request_training()
 
-    def _success_step_count(self) -> int:
-        return len(
-            self.history.successful_steps_from_attempts(self.attempt_history.all())
-        )
+    def _sample_count(self) -> int:
+        x, _ = attempts_to_dataset(self.attempt_history.all())
+        return len(x)
 
-    def _maybe_request_training(self, reason: str = "") -> None:
-        """Запросить обучение, если в буфере достаточно успешных шагов."""
-        if self._success_step_count() >= TRAIN_MIN_SUCCESS_STEPS:
+    def _maybe_request_training(self) -> None:
+        if self._cached_samples >= TRAIN_MIN_SAMPLES:
             self._pending_train = True
 
     def needs_training(self) -> bool:
         return self._pending_train
 
     def maybe_train(self) -> bool:
-        """
-        Если запрошено обучение — выполнить fit, почистить буфер, включить NN.
-        Возвращает True, если обучение реально запускалось.
-        """
         if not self._pending_train:
             return False
 
         self._pending_train = False
-        train_steps = self.history.successful_steps_from_attempts(
-            self.attempt_history.all()
-        )
-        if len(train_steps) < TRAIN_MIN_SUCCESS_STEPS:
-            # данных мало — остаёмся в текущей логике act()
+        attempts = self.attempt_history.all()
+        x, _ = attempts_to_dataset(attempts)
+        if len(x) < TRAIN_MIN_SAMPLES:
             if not self.network.is_trained:
-                self.controller_mode = ControllerMode.RANDOM
+                self.dispatcher.set_random()
+            self._sync_mode()
             return False
 
-        self.controller_mode = ControllerMode.TRAINING
-        result = self.network.train_on_steps(train_steps)
+        self.dispatcher.set_training()
+        self._sync_mode()
+        result = self.network.train_on_attempts(attempts)
         self.last_train_samples = result.get("samples", 0)
 
         removed_steps = self.history.keep_newest_fraction(EXPERIENCE_KEEP_FRACTION)
@@ -264,20 +238,21 @@ class NeuralFoodAgent(BaseAgent):
         )
         self.last_cleanup_removed = removed_steps + removed_attempts
         self.cleanup_count += 1
+        self.foods_since_train = 0
 
-        self.evaluator.reset()
-        self.random_foods = 0
-        self.neural_foods_since_train = 0
-        self.controller_mode = ControllerMode.NEURAL
+        self.dispatcher.set_neural()
+        self._sync_mode()
+        self._cached_samples = self._sample_count()
         return True
 
     def dashboard_stats(self) -> dict:
         stats = super().dashboard_stats()
-        eval_stats = self.evaluator.status_dict()
         loss = self.network.last_loss
         acc = self.network.last_accuracy
+        d = self.dispatcher.status_dict()
         stats.update(
             {
+                **d,
                 "train_count": self.network.train_count,
                 "last_train_samples": self.last_train_samples or "-",
                 "last_loss": f"{loss:.3f}" if loss is not None else "-",
@@ -285,16 +260,11 @@ class NeuralFoodAgent(BaseAgent):
                 "cleanup_count": self.cleanup_count,
                 "last_cleanup_removed": self.last_cleanup_removed,
                 "food_total": self.food_total,
-                "random_foods": self.random_foods,
-                "neural_foods_since_train": self.neural_foods_since_train,
-                "train_every_n_neural_foods": TRAIN_EVERY_N_NEURAL_FOODS,
-                "eval_min_samples": EVAL_MIN_SAMPLES,
-                **eval_stats,
-                "eval_success_rate": (
-                    f"{eval_stats['eval_success_rate']:.2f}"
-                    if eval_stats["eval_success_rate"] is not None
-                    else "-"
-                ),
+                "foods_since_train": self.foods_since_train,
+                "train_every_n_foods": TRAIN_EVERY_N_FOODS,
+                "history_len": HISTORY_LEN,
+                "last_switch_reason": self.last_switch_reason,
+                "trainable_samples": self._cached_samples,
             }
         )
         return stats

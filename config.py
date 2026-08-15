@@ -13,7 +13,7 @@ BLACK = (0, 0, 0)
 TARGET_SIZE = 30
 PLAYER_SIZE = TARGET_SIZE
 PLAYER_SPEED = 5
-TARGET_COUNT = 5
+TARGET_COUNT = 30
 
 # Режим управления: CONTROL_AI — класс Player и ИИ-агент; CONTROL_KEYBOARD — KeyboardPlayer и стрелки
 CONTROL_AI = "ai"
@@ -22,7 +22,6 @@ CONTROL_KEYBOARD = "keyboard"
 # Режимы проверки границ
 BOUNDARY_MODE_BOUNCE = 0      # Останов у края (без скорости направления)
 BOUNDARY_MODE_WRAP = 1        # Телепортация (появляется с противоположной стороны)
-
 
 # Выберите режим (по умолчанию - отскок)
 BOUNDARY_MODE = BOUNDARY_MODE_BOUNCE
@@ -38,24 +37,24 @@ RADAR_VIEW_HEIGHT = 480
 # Попытка найти еду: лимит шагов до исхода «не дошёл»
 ATTEMPT_MAX_STEPS = 200
 
-# Нейросеть и режимы управления
+# Нейросеть
 NN_HIDDEN_1 = 128
 NN_HIDDEN_2 = 64
 NN_EPOCHS = 8
 NN_BATCH_SIZE = 32
 NN_LEARNING_RATE = 1e-3
+# Сколько последних шагов в входе (радары + прошлые действия)
+HISTORY_LEN = 3
 
-# Оценщик: окно последних нейросетевых попыток
-EVAL_WINDOW = 12
-EVAL_MIN_SAMPLES = 5
-EVAL_MIN_SUCCESS_RATE = 0.25  # ниже → случайное блуждание
+# Диспетчер: смена метода, если долго нет еды
+DISPATCH_STALE_ATTEMPTS = 5  # попыток без еды → переключить random ↔ neural
 
-# Обучение: минимум успешных шагов в буфере и доля очистки после train
-TRAIN_MIN_SUCCESS_STEPS = 40
-EXPERIENCE_KEEP_FRACTION = 0.4  # после обучения оставляем последние 40%
-# Дообучение в режиме neural: после стольких успешных «нашёл еду»
-TRAIN_EVERY_N_NEURAL_FOODS = 3
+# Обучение: мин. число сэмплов (шагов с историей), очистка буфера
+TRAIN_MIN_SAMPLES = 40
+EXPERIENCE_KEEP_FRACTION = 0.4
+# Дообучение после стольких находок еды (в любом режиме)
+TRAIN_EVERY_N_FOODS = 3
 
 # Дашборд
 DASHBOARD_WIDTH = 420
-DASHBOARD_HEIGHT = 360
+DASHBOARD_HEIGHT = 400

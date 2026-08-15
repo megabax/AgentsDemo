@@ -18,8 +18,9 @@ from config import (
     WINDOW_HEIGHT,
     WINDOW_WIDTH,
 )
-from agents import BaseAgent, ControllerMode, DummyAgent, NeuralFoodAgent
+from agents import BaseAgent, DummyAgent, NeuralFoodAgent
 from dashboard import AIDashboard
+from dispatcher import ControllerMode
 from engine import AgentEngine
 from experience import RadarReading
 from keyboard_player import KeyboardPlayer

@@ -1,4 +1,4 @@
-"""Дашборд режима ИИ: neural / random / training и статистика опыта."""
+"""Дашборд режима ИИ: диспетчер random/neural/training и статистика."""
 
 import pygame
 from pygame._sdl2.video import Renderer, Texture, Window
@@ -25,39 +25,42 @@ class AIDashboard:
         accent = mode_colors.get(mode, (180, 180, 180))
 
         pygame.draw.rect(self.surface, accent, pygame.Rect(0, 0, DASHBOARD_WIDTH, 48))
-        title = self.font.render(f"Mode: {mode.upper()}", True, (20, 20, 24))
+        title = self.font.render(f"Dispatcher: {mode.upper()}", True, (20, 20, 24))
         self.surface.blit(title, (16, 12))
 
         lines = [
             f"Experience steps: {stats.get('experience_steps', 0)}",
-            f"Closed attempts: {stats.get('attempts', 0)}",
-            f"  successes: {stats.get('successes', 0)}  failures: {stats.get('failures', 0)}",
+            f"Attempts: {stats.get('attempts', 0)} "
+            f"(+{stats.get('successes', 0)} / -{stats.get('failures', 0)})",
+            f"Trainable samples (+/-): {stats.get('trainable_samples', 0)}",
+            f"History window: {stats.get('history_len', '-')}",
+            f"Stale attempts: {stats.get('stale_attempts', 0)}"
+            f" / {stats.get('stale_limit', '?')}",
+            f"Mode switches: {stats.get('switch_count', 0)}",
+            f"Last switch: {stats.get('last_switch_reason', '-')}",
             f"Trainings: {stats.get('train_count', 0)}",
             f"Last train samples: {stats.get('last_train_samples', '-')}",
             f"Last loss / acc: {stats.get('last_loss', '-')} / {stats.get('last_accuracy', '-')}",
             f"Buffer cleanups: {stats.get('cleanup_count', 0)}",
             f"Last cleanup removed: {stats.get('last_cleanup_removed', 0)}",
-            f"NN eval rate: {stats.get('eval_success_rate', '-')}",
-            f"Eval samples: {stats.get('eval_samples', 0)} (need ≥ {stats.get('eval_min_samples', 0)})",
-            f"Switch→random?: {stats.get('switch_to_random', False)}",
-            f"Food found (total): {stats.get('food_total', 0)}",
-            f"Random foods since NN fail: {stats.get('random_foods', 0)}",
-            f"Neural foods since train: {stats.get('neural_foods_since_train', 0)}"
-            f" / {stats.get('train_every_n_neural_foods', '?')}",
+            f"Food total: {stats.get('food_total', 0)}",
+            f"Foods since train: {stats.get('foods_since_train', 0)}"
+            f" / {stats.get('train_every_n_foods', '?')}",
+            f"Network trained: {stats.get('network_trained', False)}",
         ]
 
-        y = 64
+        y = 58
         for line in lines:
             text = self.small.render(str(line), True, (220, 220, 225))
             self.surface.blit(text, (16, y))
-            y += 22
+            y += 20
 
         hint = self.small.render(
-            "neural=policy  random=explore  training=fit",
+            "dispatcher switches if method finds no food too long",
             True,
             (140, 145, 155),
         )
-        self.surface.blit(hint, (16, DASHBOARD_HEIGHT - 32))
+        self.surface.blit(hint, (16, DASHBOARD_HEIGHT - 28))
 
         texture = Texture.from_surface(self.renderer, self.surface)
         self.renderer.clear()
