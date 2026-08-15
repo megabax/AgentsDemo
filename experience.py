@@ -69,6 +69,8 @@ class Attempt:
     intended_direction: Optional[int] = None
     initial_radar: Optional[RadarReading] = None
     steps: List[ExperienceStep] = field(default_factory=list)
+    # Режим контроллера на момент попытки: "neural" / "random" / …
+    source_mode: Optional[str] = None
     outcome: AttemptOutcome = AttemptOutcome.PENDING
 
     @property
@@ -131,6 +133,21 @@ class AttemptHistory:
     def failures(self) -> List[Attempt]:
         return [a for a in self._attempts if a.outcome == AttemptOutcome.FAILURE]
 
+    def drop_oldest_fraction(self, drop_fraction: float) -> int:
+        """Удалить старые попытки; вернуть число удалённых."""
+        if not self._attempts or drop_fraction <= 0:
+            return 0
+        drop_fraction = min(1.0, drop_fraction)
+        n = int(len(self._attempts) * drop_fraction)
+        for _ in range(n):
+            self._attempts.popleft()
+        return n
+
+    def keep_newest_fraction(self, keep_fraction: float) -> int:
+        """Оставить только хвост; вернуть число удалённых."""
+        keep_fraction = max(0.0, min(1.0, keep_fraction))
+        return self.drop_oldest_fraction(1.0 - keep_fraction)
+
 
 @dataclass
 class ExperienceHistory:
@@ -187,3 +204,30 @@ class ExperienceHistory:
     def extend(self, steps: Iterable[ExperienceStep]) -> None:
         for step in steps:
             self._steps.append(step)
+
+    def drop_oldest(self, count: int) -> int:
+        """Удалить count старых записей; вернуть сколько реально удалили."""
+        removed = 0
+        count = max(0, count)
+        while removed < count and self._steps:
+            self._steps.popleft()
+            removed += 1
+        return removed
+
+    def drop_oldest_fraction(self, drop_fraction: float) -> int:
+        if not self._steps or drop_fraction <= 0:
+            return 0
+        drop_fraction = min(1.0, drop_fraction)
+        return self.drop_oldest(int(len(self._steps) * drop_fraction))
+
+    def keep_newest_fraction(self, keep_fraction: float) -> int:
+        keep_fraction = max(0.0, min(1.0, keep_fraction))
+        return self.drop_oldest_fraction(1.0 - keep_fraction)
+
+    def successful_steps_from_attempts(self, attempts: Iterable[Attempt]) -> List[ExperienceStep]:
+        """Шаги из успешных попыток — материал для обучения."""
+        result: List[ExperienceStep] = []
+        for attempt in attempts:
+            if attempt.outcome == AttemptOutcome.SUCCESS:
+                result.extend(attempt.steps)
+        return result

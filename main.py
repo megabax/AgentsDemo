@@ -1,20 +1,22 @@
 """
-Простой шаблон проекта для ИИ-агента в компьютерной игре.
-Игра: управление красным квадратом, который должен собирать зелёные цели.
-Инфраструктура ИИ: радар → история опыта → движок движения (обучение пока заглушка).
+Шаблон ИИ-агента: радар → опыт → движок; Keras-политика с random fallback.
 """
+
+import os
+
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 import pygame
 
 from config import CONTROL_AI, CONTROL_KEYBOARD
-from agents import DummyAgent, RadarFoodAgent
+from agents import NeuralFoodAgent
 from game import Game
 
 # Смените на CONTROL_KEYBOARD для ручного управления
 CONTROL_MODE = CONTROL_AI
 
-# DummyAgent — случайные ходы; RadarFoodAgent — заглушка будущего ИИ по радару
-AGENT_CLASS = RadarFoodAgent #DummyAgent
+# NeuralFoodAgent — Keras + random walk + переобучение
+AGENT_CLASS = NeuralFoodAgent
 
 
 def main():

@@ -18,7 +18,8 @@ from config import (
     WINDOW_HEIGHT,
     WINDOW_WIDTH,
 )
-from agents import BaseAgent, DummyAgent
+from agents import BaseAgent, ControllerMode, DummyAgent, NeuralFoodAgent
+from dashboard import AIDashboard
 from engine import AgentEngine
 from experience import RadarReading
 from keyboard_player import KeyboardPlayer
@@ -31,8 +32,9 @@ class Game:
     def __init__(self, control_mode=CONTROL_AI):
         self.control_mode = control_mode
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-        pygame.display.set_caption("ИИ-агент vs Игра (шаблон)")
+        pygame.display.set_caption("ИИ-агент vs Игра")
         self.radar_view = RadarView()
+        self.dashboard = AIDashboard() if control_mode == CONTROL_AI else None
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, 36)
         self.engine = None
@@ -75,27 +77,33 @@ class Game:
                 self._add_random_target()
         return food_count
 
-    def draw_ui(self):
+    def draw_ui(self, agent: BaseAgent = None):
         score_text = self.font.render(f"Score: {self.player.score}", True, BLACK)
         self.screen.blit(score_text, (10, 10))
 
         if self.control_mode == CONTROL_KEYBOARD:
             info_text = self.font.render("Arrow keys — move", True, BLUE)
+        elif agent is not None:
+            mode = getattr(agent, "controller_mode", None)
+            mode_name = mode.value if mode is not None else "ai"
+            info_text = self.font.render(f"AI mode: {mode_name}", True, BLUE)
         else:
-            info_text = self.font.render("AI Agent Placeholder (random movement)", True, BLUE)
+            info_text = self.font.render("AI agent", True, BLUE)
         self.screen.blit(info_text, (10, WINDOW_HEIGHT - 40))
 
-    def draw(self):
+    def draw(self, agent: BaseAgent = None):
         self.screen.fill(WHITE)
 
         for target in self.targets:
             target.draw(self.screen)
 
         self.player.draw(self.screen)
-        self.draw_ui()
+        self.draw_ui(agent)
 
         pygame.display.flip()
         self.radar_view.draw(self.player.radar)
+        if self.dashboard is not None and agent is not None:
+            self.dashboard.draw(agent.dashboard_stats())
 
     def _handle_events(self):
         for event in pygame.event.get():
@@ -107,6 +115,8 @@ class Game:
     def _shutdown(self):
         self.running = False
         self.radar_view.close()
+        if self.dashboard is not None:
+            self.dashboard.close()
         pygame.quit()
         sys.exit()
 
@@ -117,10 +127,6 @@ class Game:
         return RadarReading.from_radar(self.player.radar)
 
     def step(self, action):
-        """
-        Один шаг среды: движок двигает агента, затем еда и радар.
-        Возвращает (state, food_count, done).
-        """
         if self.engine is None:
             raise RuntimeError("step() доступен только в режиме CONTROL_AI")
 
@@ -158,14 +164,17 @@ class Game:
                 food_gained=food_count > 0,
                 food_count=food_count,
             )
-            # покадровый learn — заглушка; основное обучение — в on_attempt_end
 
-            self.draw()
+            if isinstance(agent, NeuralFoodAgent) and agent.needs_training():
+                agent.controller_mode = ControllerMode.TRAINING
+                self.draw(agent)
+                agent.maybe_train()
+
+            self.draw(agent)
             self.clock.tick(FPS)
             pygame.time.delay(30)
 
     def run_keyboard(self):
-        """Игра с управлением стрелками (класс KeyboardPlayer)."""
         if self.control_mode != CONTROL_KEYBOARD:
             raise ValueError("run_keyboard только при control_mode=CONTROL_KEYBOARD.")
 

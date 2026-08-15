@@ -37,3 +37,25 @@ RADAR_VIEW_HEIGHT = 480
 
 # Попытка найти еду: лимит шагов до исхода «не дошёл»
 ATTEMPT_MAX_STEPS = 200
+
+# Нейросеть и режимы управления
+NN_HIDDEN_1 = 128
+NN_HIDDEN_2 = 64
+NN_EPOCHS = 8
+NN_BATCH_SIZE = 32
+NN_LEARNING_RATE = 1e-3
+
+# Оценщик: окно последних нейросетевых попыток
+EVAL_WINDOW = 12
+EVAL_MIN_SAMPLES = 5
+EVAL_MIN_SUCCESS_RATE = 0.25  # ниже → случайное блуждание
+
+# Обучение: минимум успешных шагов в буфере и доля очистки после train
+TRAIN_MIN_SUCCESS_STEPS = 40
+EXPERIENCE_KEEP_FRACTION = 0.4  # после обучения оставляем последние 40%
+# Дообучение в режиме neural: после стольких успешных «нашёл еду»
+TRAIN_EVERY_N_NEURAL_FOODS = 3
+
+# Дашборд
+DASHBOARD_WIDTH = 420
+DASHBOARD_HEIGHT = 360
