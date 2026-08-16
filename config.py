@@ -55,6 +55,10 @@ EXPERIENCE_KEEP_FRACTION = 0.4
 # Дообучение после стольких находок еды (в любом режиме)
 TRAIN_EVERY_N_FOODS = 3
 
+# Случайное блуждание: одно действие держится случайное число шагов
+RANDOM_WALK_MIN_STEPS = 1
+RANDOM_WALK_MAX_STEPS = 10
+
 # Дашборд
 DASHBOARD_WIDTH = 420
 DASHBOARD_HEIGHT = 400

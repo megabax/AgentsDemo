@@ -10,8 +10,8 @@ from config import (
     TRAIN_EVERY_N_FOODS,
     TRAIN_MIN_SAMPLES,
 )
-from dispatcher import ControllerMode, ModeDispatcher
-from engine import ALL_ACTIONS, ACTION_STAY
+from dispatcher import ModeDispatcher
+from engine import MOVEMENT_ACTIONS, ACTION_STAY
 from experience import (
     Attempt,
     AttemptHistory,
@@ -40,7 +40,7 @@ class BaseAgent:
         self.step_index = 0
         self.attempt_index = 0
         self.current_attempt: Optional[Attempt] = None
-        self.controller_mode = ControllerMode.RANDOM
+        self.controller_mode = "random"
 
     def reset(self) -> None:
         self.history.clear()
@@ -61,7 +61,11 @@ class BaseAgent:
             max_steps=self.max_steps_per_attempt,
             intended_direction=self.choose_direction(radar),
             initial_radar=radar,
-            source_mode=self.controller_mode.value,
+            source_mode=(
+                self.controller_mode.value
+                if hasattr(self.controller_mode, "value")
+                else str(self.controller_mode)
+            ),
         )
         self.attempt_index += 1
         self.current_attempt = attempt
@@ -123,8 +127,10 @@ class BaseAgent:
         self.learn()
 
     def dashboard_stats(self) -> dict:
+        mode = self.controller_mode
+        mode_name = mode.value if hasattr(mode, "value") else str(mode)
         return {
-            "mode": self.controller_mode.value,
+            "mode": mode_name,
             "experience_steps": len(self.history),
             "attempts": len(self.attempt_history),
             "successes": len(self.attempt_history.successes()),
@@ -134,8 +140,8 @@ class BaseAgent:
 
 class DummyAgent(BaseAgent):
     def act(self, radar: RadarReading, state: Optional[dict] = None) -> int:
-        self.controller_mode = ControllerMode.RANDOM
-        return random.choice(ALL_ACTIONS)
+        self.controller_mode = "random"
+        return random.choice(MOVEMENT_ACTIONS)
 
 
 class RadarFoodAgent(BaseAgent):
@@ -153,7 +159,7 @@ class NeuralFoodAgent(BaseAgent):
         super().__init__(**kwargs)
         self.network = FoodPolicyNetwork()
         self.dispatcher = ModeDispatcher(self.network)
-        self.controller_mode = self.dispatcher.mode
+        self._sync_mode()
         self.food_total = 0
         self.foods_since_train = 0
         self.cleanup_count = 0
@@ -166,7 +172,7 @@ class NeuralFoodAgent(BaseAgent):
     def reset(self) -> None:
         super().reset()
         self.dispatcher.reset()
-        self.controller_mode = self.dispatcher.mode
+        self._sync_mode()
         self.food_total = 0
         self.foods_since_train = 0
         self.cleanup_count = 0
@@ -177,7 +183,13 @@ class NeuralFoodAgent(BaseAgent):
         self._cached_samples = 0
 
     def _sync_mode(self) -> None:
-        self.controller_mode = self.dispatcher.mode
+        # строка или объект с .value — для UI и source_mode
+        mode = self.dispatcher.mode
+        self.controller_mode = mode.value if hasattr(mode, "value") else mode
+
+    def begin_attempt(self, radar: RadarReading) -> Attempt:
+        self._sync_mode()
+        return super().begin_attempt(radar)
 
     def act(self, radar: RadarReading, state: Optional[dict] = None) -> int:
         past = self.history.recent(HISTORY_LEN - 1)

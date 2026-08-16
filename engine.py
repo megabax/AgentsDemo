@@ -10,7 +10,10 @@ ACTION_LEFT = 2
 ACTION_RIGHT = 3
 ACTION_STAY = 4
 
-ALL_ACTIONS = (ACTION_UP, ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT, ACTION_STAY)
+# Движение (для random/NN). STAY не используем в политике — иначе
+# отрицательные примеры «не ходи X» размазывают вероятность на «стоять».
+MOVEMENT_ACTIONS = (ACTION_UP, ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT)
+ALL_ACTIONS = MOVEMENT_ACTIONS + (ACTION_STAY,)
 
 
 class AgentEngine:

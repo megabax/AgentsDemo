@@ -16,11 +16,11 @@ from config import (
     RADAR_MAX_RANGE,
     RADAR_RAY_COUNT,
 )
-from engine import ALL_ACTIONS
+from engine import MOVEMENT_ACTIONS
 from experience import Attempt, AttemptOutcome, ExperienceStep, RadarReading
 
 
-NUM_ACTIONS = len(ALL_ACTIONS)
+NUM_ACTIONS = len(MOVEMENT_ACTIONS)
 RADAR_FEAT_SIZE = RADAR_RAY_COUNT * 4  # distance + R + G + B
 FRAME_FEAT_SIZE = RADAR_FEAT_SIZE + NUM_ACTIONS  # радар + one-hot действия
 FEATURE_SIZE = HISTORY_LEN * FRAME_FEAT_SIZE
@@ -40,9 +40,10 @@ def radar_to_features(radar: RadarReading) -> np.ndarray:
 
 
 def action_to_one_hot(action: Optional[int]) -> np.ndarray:
+    """One-hot только по MOVEMENT_ACTIONS; STAY и прочее → нули."""
     vec = np.zeros(NUM_ACTIONS, dtype=np.float32)
-    if action is not None and 0 <= action < NUM_ACTIONS:
-        vec[action] = 1.0
+    if action is not None and action in MOVEMENT_ACTIONS:
+        vec[MOVEMENT_ACTIONS.index(action)] = 1.0
     return vec
 
 
@@ -91,16 +92,21 @@ def history_features_at_index(
 
 def label_for_action(action: int, positive: bool) -> np.ndarray:
     """
-    Положительный пример — one-hot действия.
-    Отрицательный — равномерно по остальным (чего не делать).
+    Положительный пример — one-hot направления.
+    Отрицательный — равномерно по остальным направлениям (без STAY).
+    Шаги со STAY в истории пропускаются на уровне attempts_to_dataset.
     """
     y = np.zeros(NUM_ACTIONS, dtype=np.float32)
+    if action not in MOVEMENT_ACTIONS:
+        # на всякий случай: не усиливать «стоять»
+        return y
+    idx = MOVEMENT_ACTIONS.index(action)
     if positive:
-        y[action] = 1.0
+        y[idx] = 1.0
     else:
         share = 1.0 / max(1, NUM_ACTIONS - 1)
         for a in range(NUM_ACTIONS):
-            if a != action:
+            if a != idx:
                 y[a] = share
     return y
 
@@ -109,7 +115,7 @@ def attempts_to_dataset(
     attempts: Sequence[Attempt],
     history_len: int = HISTORY_LEN,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Сэмплы из успешных (+) и провальных (−) попыток."""
+    """Сэмплы из успешных (+) и провальных (−) попыток; только шаги с движением."""
     xs: List[np.ndarray] = []
     ys: List[np.ndarray] = []
     for attempt in attempts:
@@ -121,6 +127,8 @@ def attempts_to_dataset(
             continue
         steps = attempt.steps
         for i in range(len(steps)):
+            if steps[i].action not in MOVEMENT_ACTIONS:
+                continue
             xs.append(history_features_at_index(steps, i, history_len))
             ys.append(label_for_action(steps[i].action, positive))
 
@@ -162,7 +170,8 @@ class FoodPolicyNetwork:
     def predict_action(self, features: np.ndarray) -> int:
         x = features.astype(np.float32)[None, ...]
         probs = self.model(x, training=False).numpy()[0]
-        return int(np.argmax(probs))
+        idx = int(np.argmax(probs))
+        return MOVEMENT_ACTIONS[idx]
 
     def train_on_attempts(self, attempts: Sequence[Attempt]) -> dict:
         x, y = attempts_to_dataset(attempts)

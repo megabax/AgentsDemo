@@ -20,7 +20,6 @@ from config import (
 )
 from agents import BaseAgent, DummyAgent, NeuralFoodAgent
 from dashboard import AIDashboard
-from dispatcher import ControllerMode
 from engine import AgentEngine
 from experience import RadarReading
 from keyboard_player import KeyboardPlayer
@@ -85,8 +84,8 @@ class Game:
         if self.control_mode == CONTROL_KEYBOARD:
             info_text = self.font.render("Arrow keys — move", True, BLUE)
         elif agent is not None:
-            mode = getattr(agent, "controller_mode", None)
-            mode_name = mode.value if mode is not None else "ai"
+            mode = getattr(agent, "controller_mode", "ai")
+            mode_name = mode.value if hasattr(mode, "value") else str(mode)
             info_text = self.font.render(f"AI mode: {mode_name}", True, BLUE)
         else:
             info_text = self.font.render("AI agent", True, BLUE)
@@ -167,7 +166,8 @@ class Game:
             )
 
             if isinstance(agent, NeuralFoodAgent) and agent.needs_training():
-                agent.controller_mode = ControllerMode.TRAINING
+                agent.dispatcher.set_training()
+                agent._sync_mode()
                 self.draw(agent)
                 agent.maybe_train()
 

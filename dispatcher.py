@@ -1,27 +1,24 @@
-"""Диспетчер: кто управляет движком — random или нейросеть."""
+"""Диспетчер: переключает объекты Behavior (random ↔ neural)."""
 
-import random
-from enum import Enum
 from typing import Optional
 
 import numpy as np
 
+from behaviors import (
+    Behavior,
+    NeuralBehavior,
+    RandomWalkBehavior,
+    TrainingBehavior,
+)
 from config import DISPATCH_STALE_ATTEMPTS
-from engine import ALL_ACTIONS
 from experience import Attempt, AttemptOutcome
 from nn_model import FoodPolicyNetwork
 
 
-class ControllerMode(str, Enum):
-    NEURAL = "neural"
-    RANDOM = "random"
-    TRAINING = "training"
-
-
 class ModeDispatcher:
     """
+    Держит варианты поведения и выбирает текущий объект Behavior.
     Переключает random ↔ neural, если текущий метод долго не даёт еды.
-    Нейросеть сама движок не трогает — только предлагает действие диспетчеру.
     """
 
     def __init__(
@@ -31,31 +28,36 @@ class ModeDispatcher:
     ):
         self.network = network
         self.stale_limit = stale_attempts
-        self.mode = ControllerMode.RANDOM
-        self.stale_attempts = 0  # подряд попыток без еды в текущем режиме
+        self.random_behavior = RandomWalkBehavior()
+        self.neural_behavior = NeuralBehavior(network)
+        self.training_behavior = TrainingBehavior()
+        self.current: Behavior = self.random_behavior
+        self.stale_attempts = 0
         self.switch_count = 0
 
+    @property
+    def mode(self):
+        """Совместимость: имя текущего поведения (Enum-like .value)."""
+        return _ModeName(self.current.name)
+
     def reset(self) -> None:
-        self.mode = ControllerMode.RANDOM
+        self.random_behavior.reset()
+        self.training_behavior.reset()
+        self.current = self.random_behavior
         self.stale_attempts = 0
         self.switch_count = 0
 
     def choose_action(self, features: np.ndarray) -> int:
-        if self.mode == ControllerMode.TRAINING:
-            return random.choice(ALL_ACTIONS)
-
-        if self.mode == ControllerMode.NEURAL and self.network.is_trained:
-            return self.network.predict_action(features)
-
-        # нет обученной сети или режим random
-        if self.mode == ControllerMode.NEURAL and not self.network.is_trained:
-            self.mode = ControllerMode.RANDOM
-        return random.choice(ALL_ACTIONS)
+        # нейросеть без обучения → откат на random
+        if (
+            self.current is self.neural_behavior
+            and not self.neural_behavior.is_ready
+        ):
+            self.random_behavior.reset()
+            self.current = self.random_behavior
+        return self.current.choose_action(features)
 
     def on_attempt_end(self, attempt: Attempt) -> Optional[str]:
-        """
-        Учёт исхода. Возвращает причину переключения режима или None.
-        """
         if attempt.outcome == AttemptOutcome.ABORTED:
             return None
 
@@ -63,46 +65,66 @@ class ModeDispatcher:
             self.stale_attempts = 0
             return None
 
-        # failure — метод «долго не даёт результат»
         self.stale_attempts += 1
         if self.stale_attempts >= self.stale_limit:
             return self._switch_method()
         return None
 
     def _switch_method(self) -> str:
-        old = self.mode
-        if self.mode == ControllerMode.NEURAL:
-            self.mode = ControllerMode.RANDOM
-        elif self.mode == ControllerMode.RANDOM:
-            if self.network.is_trained:
-                self.mode = ControllerMode.NEURAL
+        old = self.current.name
+        if self.current is self.neural_behavior or self.current is self.training_behavior:
+            self.current = self.random_behavior
+        elif self.current is self.random_behavior:
+            if self.neural_behavior.is_ready:
+                self.current = self.neural_behavior
             else:
-                # сети ещё нет — остаёмся в random, сбрасываем счётчик
                 self.stale_attempts = 0
                 return "stay_random_untrained"
         else:
-            self.mode = ControllerMode.RANDOM
+            self.current = self.random_behavior
 
         self.stale_attempts = 0
         self.switch_count += 1
-        return f"{old.value}->{self.mode.value}"
+        self.current.reset()
+        return f"{old}->{self.current.name}"
 
     def set_training(self) -> None:
-        self.mode = ControllerMode.TRAINING
+        self.training_behavior.reset()
+        self.current = self.training_behavior
 
     def set_neural(self) -> None:
-        self.mode = ControllerMode.NEURAL
+        self.current = self.neural_behavior
         self.stale_attempts = 0
 
     def set_random(self) -> None:
-        self.mode = ControllerMode.RANDOM
+        self.random_behavior.reset()
+        self.current = self.random_behavior
         self.stale_attempts = 0
 
     def status_dict(self) -> dict:
         return {
-            "mode": self.mode.value,
+            "mode": self.current.name,
             "stale_attempts": self.stale_attempts,
             "stale_limit": self.stale_limit,
             "switch_count": self.switch_count,
             "network_trained": self.network.is_trained,
+            "behavior": self.current.__class__.__name__,
         }
+
+
+class _ModeName:
+    """Обёртка с .value, чтобы agent.controller_mode.value продолжал работать."""
+
+    def __init__(self, name: str):
+        self.value = name
+        self.name = name.upper()
+
+    def __eq__(self, other) -> bool:
+        if isinstance(other, _ModeName):
+            return self.value == other.value
+        if isinstance(other, str):
+            return self.value == other
+        return NotImplemented
+
+    def __repr__(self) -> str:
+        return f"Mode({self.value!r})"
