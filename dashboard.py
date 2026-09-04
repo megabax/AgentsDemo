@@ -3,12 +3,13 @@
 import pygame
 from pygame._sdl2.video import Renderer, Texture, Window
 
-from config import DASHBOARD_HEIGHT, DASHBOARD_WIDTH
+from config import DASHBOARD_HEIGHT, DASHBOARD_WIDTH, DASHBOARD_WINDOW_POS
 
 
 class AIDashboard:
     def __init__(self):
         self.window = Window("AI Dashboard", size=(DASHBOARD_WIDTH, DASHBOARD_HEIGHT))
+        self.window.position = DASHBOARD_WINDOW_POS
         self.renderer = Renderer(self.window)
         self.surface = pygame.Surface((DASHBOARD_WIDTH, DASHBOARD_HEIGHT))
         self.font = pygame.font.Font(None, 28)

@@ -8,6 +8,7 @@ from config import (
     GREEN,
     RADAR_VIEW_HEIGHT,
     RADAR_VIEW_WIDTH,
+    RADAR_WINDOW_POS,
     RED,
 )
 
@@ -20,6 +21,7 @@ class RadarView:
             "Radar RGB",
             size=(RADAR_VIEW_WIDTH, RADAR_VIEW_HEIGHT),
         )
+        self.window.position = RADAR_WINDOW_POS
         self.renderer = Renderer(self.window)
         self.surface = pygame.Surface((RADAR_VIEW_WIDTH, RADAR_VIEW_HEIGHT))
         self.font = pygame.font.Font(None, 28)

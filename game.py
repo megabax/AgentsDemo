@@ -1,5 +1,6 @@
 """Основной цикл игры."""
 
+import os
 import random
 import sys
 
@@ -11,6 +12,7 @@ from config import (
     CONTROL_AI,
     CONTROL_KEYBOARD,
     FPS,
+    GAME_WINDOW_POS,
     TARGET_COUNT,
     TARGET_SIZE,
     PLAYER_SIZE,
@@ -32,6 +34,10 @@ from target import Target
 class Game:
     def __init__(self, control_mode=CONTROL_AI):
         self.control_mode = control_mode
+        # позиция главного окна до set_mode
+        os.environ["SDL_VIDEO_WINDOW_POS"] = (
+            f"{GAME_WINDOW_POS[0]},{GAME_WINDOW_POS[1]}"
+        )
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption("ИИ-агент vs Игра")
         self.radar_view = RadarView()
