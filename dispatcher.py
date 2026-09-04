@@ -50,6 +50,10 @@ class ModeDispatcher:
     def choose_action(self, features: np.ndarray) -> int:
         return self.current.choose_action(features)
 
+    def on_pain(self, action: int) -> None:
+        """Передать «боль» от стены текущему поведению."""
+        self.current.on_pain(action)
+
     def on_attempt_end(self, attempt: Attempt) -> Optional[str]:
         if attempt.outcome == AttemptOutcome.ABORTED:
             return None

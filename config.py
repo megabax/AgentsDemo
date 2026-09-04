@@ -64,6 +64,9 @@ NEURAL_STICKY_STEPS = 5          # минимум шагов держать вы
 NEURAL_SWITCH_MARGIN = 0.12      # новый ход только если prob выше текущего на столько
 NEURAL_BLOCK_REVERSE = True      # запрет мгновенного разворота 180°
 
+# «Боль» при упоре в стену: сброс направления + отрицательный пример для NN
+WALL_PAIN_ENABLED = True
+
 # Дашборд
 DASHBOARD_WIDTH = 420
 DASHBOARD_HEIGHT = 400

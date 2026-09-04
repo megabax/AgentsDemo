@@ -37,8 +37,11 @@ class AgentEngine:
         """Привязать к игроку после reset()."""
         self.player = player
 
-    def execute(self, action: int) -> None:
-        """Выполнить одно действие перемещения."""
+    def execute(self, action: int) -> bool:
+        """
+        Выполнить одно действие перемещения.
+        Возвращает True при ударе о стену («боль»).
+        """
         if action not in ALL_ACTIONS:
             raise ValueError(f"Неизвестное действие: {action}")
-        self.player.update(action)
+        return bool(self.player.update(action))

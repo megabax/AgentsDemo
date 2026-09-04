@@ -80,6 +80,7 @@ class BaseAgent:
         action: int,
         food_gained: bool,
         food_count: int = 0,
+        pain: bool = False,
     ) -> ExperienceStep:
         if self.current_attempt is None or not self.current_attempt.is_open:
             self.begin_attempt(radar)
@@ -90,6 +91,7 @@ class BaseAgent:
             action=action,
             food_gained=food_gained,
             food_count=food_count,
+            pain=pain,
         )
         self.current_attempt.add_step(step)
         self.step_index += 1
@@ -168,6 +170,7 @@ class NeuralFoodAgent(BaseAgent):
         self.last_switch_reason = "-"
         self._pending_train = False
         self._cached_samples = 0
+        self.pain_total = 0
 
     def reset(self) -> None:
         super().reset()
@@ -181,6 +184,7 @@ class NeuralFoodAgent(BaseAgent):
         self.last_switch_reason = "-"
         self._pending_train = False
         self._cached_samples = 0
+        self.pain_total = 0
 
     def _sync_mode(self) -> None:
         # строка или объект с .value — для UI и source_mode
@@ -197,6 +201,22 @@ class NeuralFoodAgent(BaseAgent):
         action = self.dispatcher.choose_action(features)
         self._sync_mode()
         return action
+
+    def observe(
+        self,
+        radar: RadarReading,
+        action: int,
+        food_gained: bool,
+        food_count: int = 0,
+        pain: bool = False,
+    ) -> ExperienceStep:
+        step = super().observe(
+            radar, action, food_gained, food_count, pain=pain
+        )
+        if pain:
+            self.pain_total += 1
+            self.dispatcher.on_pain(action)
+        return step
 
     def learn_from_attempt(self, attempt: Attempt) -> None:
         switch = self.dispatcher.on_attempt_end(attempt)
@@ -276,6 +296,7 @@ class NeuralFoodAgent(BaseAgent):
                 "history_len": HISTORY_LEN,
                 "last_switch_reason": self.last_switch_reason,
                 "trainable_samples": self._cached_samples,
+                "pain_total": self.pain_total,
             }
         )
         return stats

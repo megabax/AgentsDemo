@@ -67,9 +67,11 @@ class BasePlayer:
 class Player(BasePlayer):
     def update(self, action):
         """
-        Обновление позиции игрока на основе действия агента.
-        action: 0 - вверх, 1 - вниз, 2 - влево, 3 - вправо, 4 - стоять
+        Обновление позиции. Возвращает True, если удар о стену
+        (хотели сдвинуться, но позиция не изменилась — «боль»).
         """
+        old_x, old_y = self.x, self.y
+
         if action == 0:  # вверх
             self.y -= PLAYER_SPEED
         elif action == 1:  # вниз
@@ -82,3 +84,7 @@ class Player(BasePlayer):
             pass
 
         self._apply_bounds()
+
+        if action in (0, 1, 2, 3) and self.x == old_x and self.y == old_y:
+            return True
+        return False

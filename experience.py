@@ -37,14 +37,16 @@ class RadarReading:
 class ExperienceStep:
     """
     Один шаг опыта для будущего обучения.
-    food_gained — True, если на этом шаге агент съел зелёный квадрат.
+    food_gained — съел зелёный квадрат;
+    pain — удар о стену (хотел идти, но упёрся).
     """
 
     step_index: int
     radar: RadarReading
     action: int
     food_gained: bool
-    food_count: int = 0  # сколько еды съедено на шаге (обычно 0 или 1)
+    food_count: int = 0
+    pain: bool = False
 
 
 class AttemptOutcome(Enum):
@@ -173,6 +175,7 @@ class ExperienceHistory:
         action: int,
         food_gained: bool,
         food_count: int = 0,
+        pain: bool = False,
     ) -> ExperienceStep:
         step = ExperienceStep(
             step_index=step_index,
@@ -180,6 +183,7 @@ class ExperienceHistory:
             action=action,
             food_gained=food_gained,
             food_count=food_count,
+            pain=pain,
         )
         self._steps.append(step)
         return step

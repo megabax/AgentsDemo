@@ -47,6 +47,7 @@ class AIDashboard:
             f"Foods since train: {stats.get('foods_since_train', 0)}"
             f" / {stats.get('train_every_n_foods', '?')}",
             f"Network trained: {stats.get('network_trained', False)}",
+            f"Wall pain hits: {stats.get('pain_total', 0)}",
         ]
 
         y = 58

@@ -94,11 +94,9 @@ def label_for_action(action: int, positive: bool) -> np.ndarray:
     """
     Положительный пример — one-hot направления.
     Отрицательный — равномерно по остальным направлениям (без STAY).
-    Шаги со STAY в истории пропускаются на уровне attempts_to_dataset.
     """
     y = np.zeros(NUM_ACTIONS, dtype=np.float32)
     if action not in MOVEMENT_ACTIONS:
-        # на всякий случай: не усиливать «стоять»
         return y
     idx = MOVEMENT_ACTIONS.index(action)
     if positive:
@@ -115,20 +113,25 @@ def attempts_to_dataset(
     attempts: Sequence[Attempt],
     history_len: int = HISTORY_LEN,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Сэмплы из успешных (+) и провальных (−) попыток; только шаги с движением."""
+    """
+    Сэмплы из успешных (+) и провальных (−) попыток.
+    Шаги с pain (удар о стену) всегда как отрицательные — «туда не ходить».
+    """
     xs: List[np.ndarray] = []
     ys: List[np.ndarray] = []
     for attempt in attempts:
         if attempt.outcome == AttemptOutcome.SUCCESS:
-            positive = True
+            attempt_positive = True
         elif attempt.outcome == AttemptOutcome.FAILURE:
-            positive = False
+            attempt_positive = False
         else:
             continue
         steps = attempt.steps
         for i in range(len(steps)):
             if steps[i].action not in MOVEMENT_ACTIONS:
                 continue
+            # боль у стены важнее исхода попытки: это локальный «не надо»
+            positive = False if steps[i].pain else attempt_positive
             xs.append(history_features_at_index(steps, i, history_len))
             ys.append(label_for_action(steps[i].action, positive))
 

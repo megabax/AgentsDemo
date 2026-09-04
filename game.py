@@ -14,6 +14,7 @@ from config import (
     TARGET_COUNT,
     TARGET_SIZE,
     PLAYER_SIZE,
+    WALL_PAIN_ENABLED,
     WHITE,
     WINDOW_HEIGHT,
     WINDOW_WIDTH,
@@ -130,12 +131,13 @@ class Game:
         if self.engine is None:
             raise RuntimeError("step() доступен только в режиме CONTROL_AI")
 
-        self.engine.execute(action)
+        wall_hit = self.engine.execute(action)
         food_count = self.check_collisions()
         self._update_radar()
         done = False
         state = self.player.get_state(self.targets)
-        return state, food_count, done
+        pain = bool(wall_hit) and WALL_PAIN_ENABLED
+        return state, food_count, done, pain
 
     def run_with_ai(self, agent: BaseAgent = None):
         if self.control_mode != CONTROL_AI:
@@ -156,13 +158,14 @@ class Game:
             state = self.player.get_state(self.targets)
             action = agent.act(radar_before, state)
 
-            _next_state, food_count, _done = self.step(action)
+            _next_state, food_count, _done, pain = self.step(action)
 
             agent.observe(
                 radar=radar_before,
                 action=action,
                 food_gained=food_count > 0,
                 food_count=food_count,
+                pain=pain,
             )
 
             if isinstance(agent, NeuralFoodAgent) and agent.needs_training():

@@ -29,6 +29,10 @@ class Behavior(ABC):
         """Сброс внутреннего состояния (если есть)."""
         pass
 
+    def on_pain(self, action: int) -> None:
+        """Реакция на удар о стену («боль») при данном действии."""
+        pass
+
 
 class RandomWalkBehavior(Behavior):
     """
@@ -48,27 +52,39 @@ class RandomWalkBehavior(Behavior):
         self.max_steps = max_steps
         self._action = None
         self._remaining = 0
+        self._avoid = None
 
     def reset(self) -> None:
         self._action = None
         self._remaining = 0
+        self._avoid = None
+
+    def on_pain(self, action: int) -> None:
+        """У стены — сразу выбрать другое направление (предпочесть разворот)."""
+        self._avoid = action
+        opp = OPPOSITE_ACTIONS.get(action)
+        if opp is not None:
+            self._action = opp
+        else:
+            choices = [a for a in MOVEMENT_ACTIONS if a != action]
+            self._action = random.choice(choices) if choices else random.choice(MOVEMENT_ACTIONS)
+        self._remaining = random.randint(self.min_steps, self.max_steps)
 
     def choose_action(self, features: np.ndarray) -> int:
         if self._remaining <= 0:
-            self._action = random.choice(MOVEMENT_ACTIONS)
+            choices = list(MOVEMENT_ACTIONS)
+            if self._avoid in choices and len(choices) > 1:
+                choices = [a for a in choices if a != self._avoid]
+            self._action = random.choice(choices)
             self._remaining = random.randint(self.min_steps, self.max_steps)
+            self._avoid = None
         self._remaining -= 1
         return self._action
 
 
 class NeuralBehavior(Behavior):
     """
-    Предсказание нейросети с анти-дребезгом:
-    - держит действие минимум NEURAL_STICKY_STEPS шагов;
-    - меняет направление только если новый ход увереннее текущего
-      на NEURAL_SWITCH_MARGIN;
-    - по желанию блокирует мгновенный разворот 180°.
-    Иначе argmax каждый кадр даёт «шатание» (влево-вправо и т.п.).
+    Предсказание нейросети с анти-дребезгом и реакцией на «боль» у стены.
     """
 
     name = "neural"
@@ -86,17 +102,38 @@ class NeuralBehavior(Behavior):
         self.block_reverse = block_reverse
         self._action = None
         self._held = 0
+        self._escape_from_wall = False
 
     @property
     def is_ready(self) -> bool:
-        """Сеть всегда может предсказывать; is_trained — отдельно (после fit)."""
         return True
 
     def reset(self) -> None:
         self._action = None
         self._held = 0
+        self._escape_from_wall = False
+
+    def on_pain(self, action: int) -> None:
+        """
+        Боль у стены: сбросить sticky и уйти в противоположную сторону
+        на ближайшие sticky_steps (разворот от стены).
+        """
+        opp = OPPOSITE_ACTIONS.get(action)
+        if opp is None:
+            self.reset()
+            return
+        self._action = opp
+        self._held = 1
+        self._escape_from_wall = True
 
     def choose_action(self, features: np.ndarray) -> int:
+        # режим побега от стены — не даём сети снова упереться сразу
+        if self._escape_from_wall and self._action is not None:
+            self._held += 1
+            if self._held < self.sticky_steps:
+                return self._action
+            self._escape_from_wall = False
+
         probs = self.network.predict_probs(features)
         proposed = MOVEMENT_ACTIONS[int(np.argmax(probs))]
 
@@ -113,7 +150,6 @@ class NeuralBehavior(Behavior):
             return self._action
 
         if self.block_reverse and OPPOSITE_ACTIONS.get(self._action) == proposed:
-            # разворот только если он заметно увереннее текущего
             cur_p = float(probs[MOVEMENT_ACTIONS.index(self._action)])
             new_p = float(probs[MOVEMENT_ACTIONS.index(proposed)])
             if new_p < cur_p + self.switch_margin * 1.5:
