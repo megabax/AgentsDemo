@@ -8,6 +8,7 @@ from tensorflow.keras import layers
 
 from config import (
     HISTORY_LEN,
+    LABEL_STEP_PENALTY,
     NN_BATCH_SIZE,
     NN_EPOCHS,
     NN_HIDDEN_1,
@@ -15,6 +16,7 @@ from config import (
     NN_LEARNING_RATE,
     RADAR_MAX_RANGE,
     RADAR_RAY_COUNT,
+    USE_DUAL_RADAR_INPUT,
 )
 from engine import MOVEMENT_ACTIONS
 from experience import Attempt, AttemptOutcome, ExperienceStep, RadarReading
@@ -86,23 +88,57 @@ def history_features_at_index(
     history_len: int = HISTORY_LEN,
 ) -> np.ndarray:
     """Признаки для шага index внутри попытки (для обучения)."""
+    # Задел: USE_DUAL_RADAR_INPUT — два снимка радара; пока не используем.
+    _ = USE_DUAL_RADAR_INPUT
     past = steps[max(0, index - (history_len - 1)) : index]
     return history_features_from_steps(past, steps[index].radar, history_len)
 
 
-def label_for_action(action: int, positive: bool) -> np.ndarray:
+def steps_until_food(steps: Sequence[ExperienceStep], index: int) -> Optional[int]:
     """
-    Положительный пример — one-hot направления.
-    Отрицательный — равномерно по остальным направлениям (без STAY).
+    Сколько шагов от index до кадра с едой (включительно: еда на этом же шаге → 0).
+    None — в хвосте истории еды не было.
+    """
+    for j in range(index, len(steps)):
+        if steps[j].food_gained:
+            return j - index
+    return None
+
+
+def food_reach_score(
+    steps_to_food: Optional[int],
+    penalty: float = LABEL_STEP_PENALTY,
+) -> float:
+    """
+    Скор достижения еды: 1.0 сразу, −penalty за каждый шаг ожидания, минимум 0.
+    Не дошёл (None) → 0.0.
+    """
+    if steps_to_food is None:
+        return 0.0
+    return max(0.0, 1.0 - penalty * float(steps_to_food))
+
+
+def label_from_reach_score(action: int, score: float) -> np.ndarray:
+    """
+    Мягкий лейбл длины 4 для softmax.
+    score — уверенность, что действие a ведёт к еде (0…1).
+    score=1 → one-hot; score=0 → «не делай a» (масса на остальных).
     """
     y = np.zeros(NUM_ACTIONS, dtype=np.float32)
     if action not in MOVEMENT_ACTIONS:
         return y
     idx = MOVEMENT_ACTIONS.index(action)
-    if positive:
-        y[idx] = 1.0
-    else:
+    score = float(max(0.0, min(1.0, score)))
+    if score <= 0.0:
         share = 1.0 / max(1, NUM_ACTIONS - 1)
+        for a in range(NUM_ACTIONS):
+            if a != idx:
+                y[a] = share
+        return y
+    y[idx] = score
+    rem = 1.0 - score
+    if rem > 0 and NUM_ACTIONS > 1:
+        share = rem / (NUM_ACTIONS - 1)
         for a in range(NUM_ACTIONS):
             if a != idx:
                 y[a] = share
@@ -114,26 +150,29 @@ def attempts_to_dataset(
     history_len: int = HISTORY_LEN,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Сэмплы из успешных (+) и провальных (−) попыток.
-    Шаги с pain (удар о стену) всегда как отрицательные — «туда не ходить».
+    Разметка по истории попытки (без планирования):
+    берём кадр (радар-контекст уже в X), смотрим, через сколько шагов впереди
+    была еда → score = 1 - LABEL_STEP_PENALTY * steps; не дошёл / боль → 0.
+    Блуждание по пути пока не учитываем — важен первый шаг и момент еды.
     """
     xs: List[np.ndarray] = []
     ys: List[np.ndarray] = []
     for attempt in attempts:
-        if attempt.outcome == AttemptOutcome.SUCCESS:
-            attempt_positive = True
-        elif attempt.outcome == AttemptOutcome.FAILURE:
-            attempt_positive = False
-        else:
+        if attempt.outcome not in (
+            AttemptOutcome.SUCCESS,
+            AttemptOutcome.FAILURE,
+        ):
             continue
         steps = attempt.steps
         for i in range(len(steps)):
             if steps[i].action not in MOVEMENT_ACTIONS:
                 continue
-            # боль у стены важнее исхода попытки: это локальный «не надо»
-            positive = False if steps[i].pain else attempt_positive
+            if steps[i].pain:
+                score = 0.0
+            else:
+                score = food_reach_score(steps_until_food(steps, i))
             xs.append(history_features_at_index(steps, i, history_len))
-            ys.append(label_for_action(steps[i].action, positive))
+            ys.append(label_from_reach_score(steps[i].action, score))
 
     if not xs:
         return (
