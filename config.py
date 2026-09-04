@@ -59,6 +59,11 @@ TRAIN_EVERY_N_FOODS = 3
 RANDOM_WALK_MIN_STEPS = 1
 RANDOM_WALK_MAX_STEPS = 10
 
+# Нейросеть: анти-дребезг (иначе argmax каждый кадр даёт «шатание»)
+NEURAL_STICKY_STEPS = 5          # минимум шагов держать выбранное направление
+NEURAL_SWITCH_MARGIN = 0.12      # новый ход только если prob выше текущего на столько
+NEURAL_BLOCK_REVERSE = True      # запрет мгновенного разворота 180°
+
 # Дашборд
 DASHBOARD_WIDTH = 420
 DASHBOARD_HEIGHT = 400

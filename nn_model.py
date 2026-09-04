@@ -167,9 +167,12 @@ class FoodPolicyNetwork:
         self.last_accuracy = None
         self.is_trained = False
 
-    def predict_action(self, features: np.ndarray) -> int:
+    def predict_probs(self, features: np.ndarray) -> np.ndarray:
         x = features.astype(np.float32)[None, ...]
-        probs = self.model(x, training=False).numpy()[0]
+        return self.model(x, training=False).numpy()[0]
+
+    def predict_action(self, features: np.ndarray) -> int:
+        probs = self.predict_probs(features)
         idx = int(np.argmax(probs))
         return MOVEMENT_ACTIONS[idx]
 
