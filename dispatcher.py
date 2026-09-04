@@ -1,4 +1,4 @@
-"""Диспетчер: переключает объекты Behavior (random ↔ neural)."""
+"""Диспетчер: переключает объекты Behavior (neural ↔ random)."""
 
 from typing import Optional
 
@@ -17,8 +17,8 @@ from nn_model import FoodPolicyNetwork
 
 class ModeDispatcher:
     """
-    Держит варианты поведения и выбирает текущий объект Behavior.
-    Переключает random ↔ neural, если текущий метод долго не даёт еды.
+    Старт с нейросети. На random переключается только если
+    текущее поведение долго не находит еду (stale attempts).
     """
 
     def __init__(
@@ -31,7 +31,7 @@ class ModeDispatcher:
         self.random_behavior = RandomWalkBehavior()
         self.neural_behavior = NeuralBehavior(network)
         self.training_behavior = TrainingBehavior()
-        self.current: Behavior = self.random_behavior
+        self.current: Behavior = self.neural_behavior
         self.stale_attempts = 0
         self.switch_count = 0
 
@@ -43,18 +43,11 @@ class ModeDispatcher:
     def reset(self) -> None:
         self.random_behavior.reset()
         self.training_behavior.reset()
-        self.current = self.random_behavior
+        self.current = self.neural_behavior
         self.stale_attempts = 0
         self.switch_count = 0
 
     def choose_action(self, features: np.ndarray) -> int:
-        # нейросеть без обучения → откат на random
-        if (
-            self.current is self.neural_behavior
-            and not self.neural_behavior.is_ready
-        ):
-            self.random_behavior.reset()
-            self.current = self.random_behavior
         return self.current.choose_action(features)
 
     def on_attempt_end(self, attempt: Attempt) -> Optional[str]:
@@ -63,6 +56,9 @@ class ModeDispatcher:
 
         if attempt.outcome == AttemptOutcome.SUCCESS:
             self.stale_attempts = 0
+            # после успеха на random можно вернуться к нейросети
+            if self.current is self.random_behavior:
+                return self._switch_to_neural(reason="food_then_neural")
             return None
 
         self.stale_attempts += 1
@@ -70,18 +66,24 @@ class ModeDispatcher:
             return self._switch_method()
         return None
 
+    def _switch_to_neural(self, reason: str = "to_neural") -> str:
+        old = self.current.name
+        self.current = self.neural_behavior
+        self.stale_attempts = 0
+        self.switch_count += 1
+        self.current.reset()
+        return f"{old}->{self.current.name}:{reason}"
+
     def _switch_method(self) -> str:
+        """При застое: neural → random; random → neural."""
         old = self.current.name
         if self.current is self.neural_behavior or self.current is self.training_behavior:
+            self.random_behavior.reset()
             self.current = self.random_behavior
         elif self.current is self.random_behavior:
-            if self.neural_behavior.is_ready:
-                self.current = self.neural_behavior
-            else:
-                self.stale_attempts = 0
-                return "stay_random_untrained"
+            self.current = self.neural_behavior
         else:
-            self.current = self.random_behavior
+            self.current = self.neural_behavior
 
         self.stale_attempts = 0
         self.switch_count += 1

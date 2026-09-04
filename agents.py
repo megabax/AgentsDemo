@@ -40,7 +40,7 @@ class BaseAgent:
         self.step_index = 0
         self.attempt_index = 0
         self.current_attempt: Optional[Attempt] = None
-        self.controller_mode = "random"
+        self.controller_mode = "neural"
 
     def reset(self) -> None:
         self.history.clear()
@@ -151,8 +151,8 @@ class RadarFoodAgent(BaseAgent):
 
 class NeuralFoodAgent(BaseAgent):
     """
-    Движком управляет ModeDispatcher (random ↔ neural).
-    Опыт пишется всегда. Обучение на +/− попытках с историей HISTORY_LEN шагов.
+    Старт с нейросети. Диспетчер уходит в random только если долго нет еды.
+    Опыт пишется всегда; обучение на +/− попытках с историей HISTORY_LEN шагов.
     """
 
     def __init__(self, **kwargs):
@@ -234,8 +234,7 @@ class NeuralFoodAgent(BaseAgent):
         attempts = self.attempt_history.all()
         x, _ = attempts_to_dataset(attempts)
         if len(x) < TRAIN_MIN_SAMPLES:
-            if not self.network.is_trained:
-                self.dispatcher.set_random()
+            self.dispatcher.set_neural()
             self._sync_mode()
             return False
 

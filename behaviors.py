@@ -56,7 +56,7 @@ class RandomWalkBehavior(Behavior):
 
 
 class NeuralBehavior(Behavior):
-    """Действие по предсказанию обученной нейросети."""
+    """Действие по предсказанию нейросети (в т.ч. до первого fit — случайные веса)."""
 
     name = "neural"
 
@@ -65,11 +65,10 @@ class NeuralBehavior(Behavior):
 
     @property
     def is_ready(self) -> bool:
-        return self.network.is_trained
+        """Сеть всегда может предсказывать; is_trained — отдельно (после fit)."""
+        return True
 
     def choose_action(self, features: np.ndarray) -> int:
-        if not self.is_ready:
-            raise RuntimeError("NeuralBehavior: сеть ещё не обучена")
         return self.network.predict_action(features)
 
 
