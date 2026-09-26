@@ -7,12 +7,13 @@ import numpy as np
 from behaviors import (
     Behavior,
     NeuralBehavior,
+    PainContextMemory,
     RandomWalkBehavior,
     TrainingBehavior,
 )
 from config import DISPATCH_STALE_ATTEMPTS
 from experience import Attempt, AttemptOutcome
-from nn_model import FoodPolicyNetwork
+from nn_model import FoodPolicyNetwork, radar_to_features
 
 
 class ModeDispatcher:
@@ -28,9 +29,10 @@ class ModeDispatcher:
     ):
         self.network = network
         self.stale_limit = stale_attempts
-        self.random_behavior = RandomWalkBehavior()
-        self.neural_behavior = NeuralBehavior(network)
-        self.training_behavior = TrainingBehavior()
+        self.pain_memory = PainContextMemory()
+        self.random_behavior = RandomWalkBehavior(pain_memory=self.pain_memory)
+        self.neural_behavior = NeuralBehavior(network, pain_memory=self.pain_memory)
+        self.training_behavior = TrainingBehavior(pain_memory=self.pain_memory)
         self.current: Behavior = self.neural_behavior
         self.stale_attempts = 0
         self.switch_count = 0
@@ -41,6 +43,7 @@ class ModeDispatcher:
         return _ModeName(self.current.name)
 
     def reset(self) -> None:
+        self.pain_memory.clear()
         self.random_behavior.reset()
         self.training_behavior.reset()
         self.current = self.neural_behavior
@@ -50,9 +53,11 @@ class ModeDispatcher:
     def choose_action(self, features: np.ndarray) -> int:
         return self.current.choose_action(features)
 
-    def on_pain(self, action: int) -> None:
-        """Передать «боль» от стены текущему поведению."""
-        self.current.on_pain(action)
+    def on_pain(self, action: int, radar=None) -> None:
+        """Запомнить боль в контексте радара и передать текущему поведению."""
+        if radar is not None:
+            self.pain_memory.record_pain(radar_to_features(radar), action)
+        self.current.on_pain(action, radar)
 
     def on_attempt_end(self, attempt: Attempt) -> Optional[str]:
         if attempt.outcome == AttemptOutcome.ABORTED:
@@ -115,6 +120,7 @@ class ModeDispatcher:
             "switch_count": self.switch_count,
             "network_trained": self.network.is_trained,
             "behavior": self.current.__class__.__name__,
+            "pain_forbids": self.pain_memory.forbidden_count(),
         }
 
 

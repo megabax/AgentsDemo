@@ -215,7 +215,7 @@ class NeuralFoodAgent(BaseAgent):
         )
         if pain:
             self.pain_total += 1
-            self.dispatcher.on_pain(action)
+            self.dispatcher.on_pain(action, radar)
         return step
 
     def learn_from_attempt(self, attempt: Attempt) -> None:

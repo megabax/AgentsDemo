@@ -71,10 +71,15 @@ NEURAL_BLOCK_REVERSE = True      # запрет мгновенного разв�
 
 # «Боль» при упоре в стену: сброс направления + отрицательный пример для NN
 WALL_PAIN_ENABLED = True
+# Повтор боли при похожем радаре → запрет этого направления в таком контексте
+PAIN_REPEAT_TO_FORBID = 2
+# Средняя разница дальности/зелёного: меньше — тот же контекст радара
+PAIN_RADAR_MAX_DIFF = 0.12
+PAIN_MEMORY_SIZE = 48
 
 # Дашборд
 DASHBOARD_WIDTH = 420
-DASHBOARD_HEIGHT = 400
+DASHBOARD_HEIGHT = 430
 
 # Расположение окон рядом (не друг на друге)
 WINDOW_GAP = 16

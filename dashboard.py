@@ -49,6 +49,7 @@ class AIDashboard:
             f" / {stats.get('train_every_n_foods', '?')}",
             f"Network trained: {stats.get('network_trained', False)}",
             f"Wall pain hits: {stats.get('pain_total', 0)}",
+            f"Forbidden radar+dir: {stats.get('pain_forbids', 0)}",
         ]
 
         y = 58

@@ -53,6 +53,21 @@ def empty_radar_features() -> np.ndarray:
     return np.zeros(RADAR_FEAT_SIZE, dtype=np.float32)
 
 
+def current_radar_from_features(features: np.ndarray) -> np.ndarray:
+    """Текущий снимок радара из вектора решения (последний кадр, без one-hot действия)."""
+    frame = np.asarray(features, dtype=np.float32)[-FRAME_FEAT_SIZE:]
+    return frame[:RADAR_FEAT_SIZE].copy()
+
+
+def radar_pain_context(radar_vec: np.ndarray) -> np.ndarray:
+    """
+    Контекст для памяти боли: дальность и зелёный канал.
+    Полный RGB слишком похож у разных стен (почти всё белое).
+    """
+    vec = np.asarray(radar_vec, dtype=np.float32)
+    return np.concatenate([vec[0::4], vec[2::4]])
+
+
 def frame_features(radar: Optional[RadarReading], action: Optional[int]) -> np.ndarray:
     """Один кадр: радар + one-hot действия (action=None → нули)."""
     radar_f = radar_to_features(radar) if radar is not None else empty_radar_features()
