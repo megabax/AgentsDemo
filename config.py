@@ -77,6 +77,11 @@ PAIN_REPEAT_TO_FORBID = 2
 PAIN_RADAR_MAX_DIFF = 0.12
 PAIN_MEMORY_SIZE = 48
 
+# Детектор зацикливания траектории (только режим neural → random)
+# «более трёх раз» = 4 повтора одного и того же куска пути
+CYCLE_MIN_REPEATS = 4
+CYCLE_MAX_PERIOD = 24
+
 # Дашборд
 DASHBOARD_WIDTH = 420
 DASHBOARD_HEIGHT = 430

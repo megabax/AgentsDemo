@@ -1,5 +1,6 @@
 """Диспетчер: переключает объекты Behavior (neural ↔ random)."""
 
+from collections import deque
 from typing import Optional
 
 import numpy as np
@@ -11,9 +12,44 @@ from behaviors import (
     RandomWalkBehavior,
     TrainingBehavior,
 )
-from config import DISPATCH_STALE_ATTEMPTS
+from config import CYCLE_MAX_PERIOD, CYCLE_MIN_REPEATS, DISPATCH_STALE_ATTEMPTS
 from experience import Attempt, AttemptOutcome
 from nn_model import FoodPolicyNetwork, radar_to_features
+
+
+class MovementCycleDetector:
+    """Ищет повтор одного и того же куска траектории."""
+
+    def __init__(
+        self,
+        min_repeats: int = CYCLE_MIN_REPEATS,
+        max_period: int = CYCLE_MAX_PERIOD,
+    ):
+        self.min_repeats = min_repeats
+        self.max_period = max_period
+        self._positions: deque = deque(maxlen=min_repeats * max_period)
+
+    def clear(self) -> None:
+        self._positions.clear()
+
+    def push(self, x: float, y: float) -> bool:
+        self._positions.append((int(round(x)), int(round(y))))
+        return self._is_cycling()
+
+    def _is_cycling(self) -> bool:
+        seq = list(self._positions)
+        n = len(seq)
+        for period in range(2, self.max_period + 1):
+            need = period * self.min_repeats
+            if n < need:
+                continue
+            window = seq[-need:]
+            pattern = window[:period]
+            if len(set(pattern)) < 2:
+                continue
+            if all(window[i] == pattern[i % period] for i in range(need)):
+                return True
+        return False
 
 
 class ModeDispatcher:
@@ -30,6 +66,8 @@ class ModeDispatcher:
         self.network = network
         self.stale_limit = stale_attempts
         self.pain_memory = PainContextMemory()
+        self.cycle_detector = MovementCycleDetector()
+        self.cycle_switches = 0
         self.random_behavior = RandomWalkBehavior(pain_memory=self.pain_memory)
         self.neural_behavior = NeuralBehavior(network, pain_memory=self.pain_memory)
         self.training_behavior = TrainingBehavior(pain_memory=self.pain_memory)
@@ -44,6 +82,8 @@ class ModeDispatcher:
 
     def reset(self) -> None:
         self.pain_memory.clear()
+        self.cycle_detector.clear()
+        self.cycle_switches = 0
         self.random_behavior.reset()
         self.training_behavior.reset()
         self.current = self.neural_behavior
@@ -58,6 +98,22 @@ class ModeDispatcher:
         if radar is not None:
             self.pain_memory.record_pain(radar_to_features(radar), action)
         self.current.on_pain(action, radar)
+
+    def note_position(self, x: float, y: float) -> Optional[str]:
+        """
+        В режиме neural: если один и тот же кусок пути повторился
+        более трёх раз — перейти на случайное блуждание.
+        Обратно на neural — прежние правила (еда или застой random).
+        """
+        if self.current is not self.neural_behavior:
+            return None
+        if not self.cycle_detector.push(x, y):
+            return None
+        self.set_random()
+        self.cycle_detector.clear()
+        self.cycle_switches += 1
+        self.switch_count += 1
+        return "cycle->random"
 
     def on_attempt_end(self, attempt: Attempt) -> Optional[str]:
         if attempt.outcome == AttemptOutcome.ABORTED:
@@ -104,10 +160,12 @@ class ModeDispatcher:
         self.current = self.training_behavior
 
     def set_neural(self) -> None:
+        self.cycle_detector.clear()
         self.current = self.neural_behavior
         self.stale_attempts = 0
 
     def set_random(self) -> None:
+        self.cycle_detector.clear()
         self.random_behavior.reset()
         self.current = self.random_behavior
         self.stale_attempts = 0
@@ -121,6 +179,7 @@ class ModeDispatcher:
             "network_trained": self.network.is_trained,
             "behavior": self.current.__class__.__name__,
             "pain_forbids": self.pain_memory.forbidden_count(),
+            "cycle_switches": self.cycle_switches,
         }
 
 

@@ -218,6 +218,13 @@ class NeuralFoodAgent(BaseAgent):
             self.dispatcher.on_pain(action, radar)
         return step
 
+    def note_position(self, x: float, y: float) -> None:
+        """Детектор цикла траектории: neural → random, обратно по правилам диспетчера."""
+        reason = self.dispatcher.note_position(x, y)
+        if reason:
+            self.last_switch_reason = reason
+            self._sync_mode()
+
     def learn_from_attempt(self, attempt: Attempt) -> None:
         switch = self.dispatcher.on_attempt_end(attempt)
         if switch:

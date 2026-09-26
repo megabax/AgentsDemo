@@ -173,6 +173,8 @@ class Game:
                 food_count=food_count,
                 pain=pain,
             )
+            if isinstance(agent, NeuralFoodAgent):
+                agent.note_position(self.player.x, self.player.y)
 
             if isinstance(agent, NeuralFoodAgent) and agent.needs_training():
                 agent.dispatcher.set_training()
