@@ -9,14 +9,11 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 import pygame
 
 from config import CONTROL_AI, CONTROL_KEYBOARD
-from agents import NeuralFoodAgent
 from game import Game
 
-# Смените на CONTROL_KEYBOARD для ручного управления
+# Смените на CONTROL_KEYBOARD для ручного управления.
+# CONTROL_AI запускает популяцию: несколько особей, отбор по времени жизни.
 CONTROL_MODE = CONTROL_AI
-
-# NeuralFoodAgent — Keras + random walk + переобучение
-AGENT_CLASS = NeuralFoodAgent
 
 
 def main():
@@ -26,8 +23,7 @@ def main():
     if CONTROL_MODE == CONTROL_KEYBOARD:
         game.run_keyboard()
     else:
-        agent = AGENT_CLASS()
-        game.run_with_ai(agent)
+        game.run_population()
 
 
 if __name__ == "__main__":

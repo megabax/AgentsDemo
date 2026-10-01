@@ -108,6 +108,11 @@ class GeneBlock:
     def repair(self) -> None:
         """Поправить связи между генами после мутации."""
 
+    def randomize(self, rng: random.Random) -> None:
+        for gene in self._genes.values():
+            gene.randomize(rng)
+        self.repair()
+
     def to_dict(self) -> dict:
         return {name: gene.to_dict() for name, gene in self._genes.items()}
 

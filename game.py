@@ -13,6 +13,8 @@ from config import (
     CONTROL_KEYBOARD,
     FPS,
     GAME_WINDOW_POS,
+    SHOW_DASHBOARD,
+    SHOW_RADAR,
     TARGET_COUNT,
     TARGET_SIZE,
     PLAYER_SIZE,
@@ -27,6 +29,8 @@ from engine import AgentEngine
 from experience import RadarReading
 from keyboard_player import KeyboardPlayer
 from player import Player
+from population import Population
+from population_view import PopulationView
 from radar_view import RadarView
 from target import Target
 
@@ -40,8 +44,15 @@ class Game:
         )
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption("ИИ-агент vs Игра")
-        self.radar_view = RadarView()
-        self.dashboard = AIDashboard() if control_mode == CONTROL_AI else None
+        # Классы окон остаются; по умолчанию радар и дашборд не открываются.
+        self.radar_view = RadarView() if SHOW_RADAR else None
+        self.dashboard = (
+            AIDashboard() if SHOW_DASHBOARD and control_mode == CONTROL_AI else None
+        )
+        self.population_view = None
+        self.population = None
+        self._overlaps = set()
+        self.id_font = pygame.font.Font(None, 28)
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, 36)
         self.engine = None
@@ -65,13 +76,23 @@ class Game:
         self.frame_count = 0
 
     def _add_random_target(self):
-        while True:
+        avoid = []
+        if self.player is not None:
+            avoid.append(self.player.rect)
+        if self.population is not None:
+            avoid.extend(member.player.rect for member in self.population.living())
+        x, y = 0, 0
+        for _ in range(50):
             x = random.randint(0, WINDOW_WIDTH - TARGET_SIZE)
             y = random.randint(0, WINDOW_HEIGHT - TARGET_SIZE)
             target_rect = pygame.Rect(x, y, TARGET_SIZE, TARGET_SIZE)
-            if not target_rect.colliderect(self.player.rect):
-                self.targets.append(Target(x, y))
-                break
+            if any(target_rect.colliderect(rect) for rect in avoid):
+                continue
+            if any(target_rect.colliderect(target.rect) for target in self.targets):
+                continue
+            self.targets.append(Target(x, y))
+            return
+        self.targets.append(Target(x, y))
 
     def check_collisions(self):
         """Проверка еды. Возвращает число съеденных целей на этом шаге."""
@@ -108,7 +129,8 @@ class Game:
         self.draw_ui(agent)
 
         pygame.display.flip()
-        self.radar_view.draw(self.player.radar)
+        if self.radar_view is not None:
+            self.radar_view.draw(self.player.radar)
         if self.dashboard is not None and agent is not None:
             self.dashboard.draw(agent.dashboard_stats())
 
@@ -121,9 +143,12 @@ class Game:
 
     def _shutdown(self):
         self.running = False
-        self.radar_view.close()
+        if self.radar_view is not None:
+            self.radar_view.close()
         if self.dashboard is not None:
             self.dashboard.close()
+        if self.population_view is not None:
+            self.population_view.close()
         pygame.quit()
         sys.exit()
 
@@ -185,6 +210,116 @@ class Game:
             self.draw(agent)
             self.clock.tick(FPS)
             pygame.time.delay(30)
+
+    def run_population(self):
+        """Несколько особей на одном поле. Радар и дашборд не рисуются."""
+        self.reset()
+        self.player.x = -1000
+        self.player.y = -1000
+        self.player.rect.topleft = (-1000, -1000)
+        pygame.display.set_caption("Популяция")
+        self.population = Population()
+        self.population.seed()
+        self.population_view = PopulationView()
+        self._overlaps = set()
+
+        while self.running:
+            self._handle_events()
+            train_one = None
+            for organism in self.population.living():
+                if self._step_organism(organism) and train_one is None:
+                    train_one = organism
+            self._neighbor_hits()
+            for organism in list(self.population.members):
+                if organism.alive and organism.vitality.dead:
+                    self.population.on_death(organism)
+            self.population.tick_birth()
+            self._draw_population()
+            if train_one is not None:
+                train_one.agent.dispatcher.set_training()
+                train_one.agent._sync_mode()
+                train_one.agent.maybe_train()
+            self.clock.tick(FPS)
+            pygame.time.delay(30)
+
+    def _step_organism(self, organism) -> bool:
+        organism.player.scan_radar(self.targets)
+        radar = RadarReading.from_radar(organism.player.radar)
+        state = organism.player.get_state(self.targets)
+        action = organism.agent.act(radar, state)
+        wall_hit = organism.engine.execute(action)
+        food_count = self._consume_food(organism.player)
+        pain = bool(wall_hit) and WALL_PAIN_ENABLED
+        organism.agent.observe(
+            radar=radar,
+            action=action,
+            food_gained=food_count > 0,
+            food_count=food_count,
+            pain=pain,
+        )
+        organism.agent.note_position(organism.player.x, organism.player.y)
+        organism.vitality.step(food_count, pain, self.population.rng)
+        return organism.agent.needs_training()
+
+    def _consume_food(self, player) -> int:
+        food_count = 0
+        for target in self.targets[:]:
+            if player.rect.colliderect(target.rect):
+                self.targets.remove(target)
+                player.score += 1
+                food_count += 1
+                self._add_random_target()
+        return food_count
+
+    def _neighbor_hits(self):
+        living = self.population.living()
+        pairs = set()
+        for index, left in enumerate(living):
+            for right in living[index + 1 :]:
+                if not left.player.rect.colliderect(right.player.rect):
+                    continue
+                key = (left.id, right.id) if left.id < right.id else (right.id, left.id)
+                pairs.add(key)
+                if key not in self._overlaps:
+                    left.vitality.hit_neighbor(self.population.rng)
+                    right.vitality.hit_neighbor(self.population.rng)
+                    self._separate(left, right)
+        self._overlaps = pairs
+
+    def _separate(self, left, right):
+        dx = right.player.x - left.player.x
+        dy = right.player.y - left.player.y
+        if dx == 0 and dy == 0:
+            dx = 1
+        dist = max(1.0, (dx * dx + dy * dy) ** 0.5)
+        push = PLAYER_SIZE / 2
+        left.player.x -= dx / dist * push
+        left.player.y -= dy / dist * push
+        right.player.x += dx / dist * push
+        right.player.y += dy / dist * push
+        left.player._apply_bounds()
+        right.player._apply_bounds()
+
+    def _draw_population(self):
+        self.screen.fill(WHITE)
+        for target in self.targets:
+            target.draw(self.screen)
+        for organism in self.population.living():
+            organism.player.draw(self.screen)
+            label = self.id_font.render(str(organism.id), True, BLACK)
+            self.screen.blit(
+                label,
+                (
+                    organism.player.x + 4,
+                    organism.player.y + 4,
+                ),
+            )
+        alive = len(self.population.living())
+        text = self.font.render(f"Живых: {alive}", True, BLACK)
+        self.screen.blit(text, (10, 10))
+        pygame.display.flip()
+        if self.population_view is not None:
+            self.population_view.draw(self.population)
 
     def run_keyboard(self):
         if self.control_mode != CONTROL_KEYBOARD:

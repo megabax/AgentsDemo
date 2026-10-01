@@ -12,7 +12,16 @@ from behaviors import (
     RandomWalkBehavior,
     TrainingBehavior,
 )
-from config import CYCLE_MAX_PERIOD, CYCLE_MIN_REPEATS, DISPATCH_STALE_ATTEMPTS
+from config import (
+    CYCLE_MAX_PERIOD,
+    CYCLE_MIN_REPEATS,
+    DISPATCH_STALE_ATTEMPTS,
+    NEURAL_STICKY_STEPS,
+    NEURAL_SWITCH_MARGIN,
+    PAIN_REPEAT_TO_FORBID,
+    RANDOM_WALK_MAX_STEPS,
+    RANDOM_WALK_MIN_STEPS,
+)
 from experience import Attempt, AttemptOutcome
 from nn_model import FoodPolicyNetwork, radar_to_features
 
@@ -62,15 +71,43 @@ class ModeDispatcher:
         self,
         network: FoodPolicyNetwork,
         stale_attempts: int = DISPATCH_STALE_ATTEMPTS,
+        behavior_block=None,
     ):
         self.network = network
         self.stale_limit = stale_attempts
-        self.pain_memory = PainContextMemory()
-        self.cycle_detector = MovementCycleDetector()
+        if behavior_block is None:
+            pain_repeat = PAIN_REPEAT_TO_FORBID
+            cycle_repeats = CYCLE_MIN_REPEATS
+            walk_min = RANDOM_WALK_MIN_STEPS
+            walk_max = RANDOM_WALK_MAX_STEPS
+            sticky = NEURAL_STICKY_STEPS
+            margin = NEURAL_SWITCH_MARGIN
+        else:
+            pain_repeat = behavior_block.gene("pain_repeat_to_forbid").value
+            cycle_repeats = behavior_block.gene("cycle_min_repeats").value
+            walk_min = behavior_block.gene("random_walk_min_steps").value
+            walk_max = behavior_block.gene("random_walk_max_steps").value
+            sticky = behavior_block.gene("neural_sticky_steps").value
+            margin = behavior_block.gene("neural_switch_margin").value
+        self.pain_memory = PainContextMemory(repeat_to_forbid=pain_repeat)
+        self.cycle_detector = MovementCycleDetector(min_repeats=cycle_repeats)
         self.cycle_switches = 0
-        self.random_behavior = RandomWalkBehavior(pain_memory=self.pain_memory)
-        self.neural_behavior = NeuralBehavior(network, pain_memory=self.pain_memory)
-        self.training_behavior = TrainingBehavior(pain_memory=self.pain_memory)
+        self.random_behavior = RandomWalkBehavior(
+            min_steps=walk_min,
+            max_steps=walk_max,
+            pain_memory=self.pain_memory,
+        )
+        self.neural_behavior = NeuralBehavior(
+            network,
+            sticky_steps=sticky,
+            switch_margin=margin,
+            pain_memory=self.pain_memory,
+        )
+        self.training_behavior = TrainingBehavior(
+            min_steps=walk_min,
+            max_steps=walk_max,
+            pain_memory=self.pain_memory,
+        )
         self.current: Behavior = self.neural_behavior
         self.stale_attempts = 0
         self.switch_count = 0

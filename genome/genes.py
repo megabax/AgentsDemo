@@ -23,6 +23,10 @@ class Gene(ABC):
     def to_dict(self):
         raise NotImplementedError
 
+    @abstractmethod
+    def randomize(self, rng: random.Random) -> None:
+        raise NotImplementedError
+
 
 class ChoiceGene(Gene):
     """Значение только из фиксированного кортежа. Мутация сдвигает на соседний вариант."""
@@ -51,6 +55,9 @@ class ChoiceGene(Gene):
     def to_dict(self) -> int:
         return self.value
 
+    def randomize(self, rng: random.Random) -> None:
+        self.value = rng.choice(self.options)
+
 
 class IntGene(Gene):
     """Целое в диапазоне [low, high]. Мутация — шаг ±1."""
@@ -77,6 +84,9 @@ class IntGene(Gene):
 
     def to_dict(self) -> int:
         return self.value
+
+    def randomize(self, rng: random.Random) -> None:
+        self.value = rng.randint(self.low, self.high)
 
 
 class FloatGene(Gene):
@@ -105,3 +115,8 @@ class FloatGene(Gene):
 
     def to_dict(self) -> float:
         return self.value
+
+    def randomize(self, rng: random.Random) -> None:
+        steps = int(round((self.high - self.low) / self.step))
+        value = self.low + rng.randint(0, max(0, steps)) * self.step
+        self.value = round(min(self.high, max(self.low, value)), 5)

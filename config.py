@@ -82,9 +82,36 @@ PAIN_MEMORY_SIZE = 48
 CYCLE_MIN_REPEATS = 4
 CYCLE_MAX_PERIOD = 24
 
+# Запас прочности. Урон = константа × случайное(0..1) × коэффициент роста.
+# Голод и старость нарастают с каждым шагом; стена и сосед — разовый удар.
+VITALITY_MAX = 100.0
+HUNGER_DAMAGE = 0.15
+HUNGER_GROWTH = 0.05
+WALL_DAMAGE = 2.0
+NEIGHBOR_DAMAGE = 5.0
+AGE_DAMAGE = 0.05
+AGE_GROWTH = 0.004
+FOOD_HEAL = 22.0
+
+# Список особей. Сверх лимита вытесняются с самым коротким временем жизни.
+POPULATION_LIMIT = 8
+# Новая особь проверяется раз в случайные 5…20 шагов.
+# Вероятность: 2 живых на поле — 1, 8 живых — 0, между ними — линейно.
+BIRTH_INTERVAL_MIN = 5
+BIRTH_INTERVAL_MAX = 20
+BIRTH_CERTAIN_AT = 2
+
+# Окна радара и дашборда остаются в коде, по умолчанию не открываются.
+SHOW_RADAR = False
+SHOW_DASHBOARD = False
+
 # Дашборд
 DASHBOARD_WIDTH = 420
 DASHBOARD_HEIGHT = 430
+
+# Окно списка популяции
+POPULATION_VIEW_WIDTH = 640
+POPULATION_VIEW_HEIGHT = 600
 
 # Расположение окон рядом (не друг на друге)
 WINDOW_GAP = 16
@@ -95,5 +122,9 @@ RADAR_WINDOW_POS = (
 )
 DASHBOARD_WINDOW_POS = (
     RADAR_WINDOW_POS[0] + RADAR_VIEW_WIDTH + WINDOW_GAP,
+    GAME_WINDOW_POS[1],
+)
+POPULATION_WINDOW_POS = (
+    GAME_WINDOW_POS[0] + WINDOW_WIDTH + WINDOW_GAP,
     GAME_WINDOW_POS[1],
 )

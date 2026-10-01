@@ -5,9 +5,6 @@ from typing import Optional
 
 from config import (
     ATTEMPT_MAX_STEPS,
-    EXPERIENCE_KEEP_FRACTION,
-    HISTORY_LEN,
-    TRAIN_EVERY_N_FOODS,
     TRAIN_MIN_SAMPLES,
 )
 from dispatcher import ModeDispatcher
@@ -20,6 +17,7 @@ from experience import (
     ExperienceStep,
     RadarReading,
 )
+from genome import Genome, decide_birth
 from nn_model import FoodPolicyNetwork, attempts_to_dataset, history_features_from_steps
 
 
@@ -157,10 +155,27 @@ class NeuralFoodAgent(BaseAgent):
     Опыт пишется всегда; обучение на +/− попытках с историей HISTORY_LEN шагов.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, genome: Optional[Genome] = None, birth_rng: Optional[random.Random] = None, **kwargs):
         super().__init__(**kwargs)
-        self.network = FoodPolicyNetwork()
-        self.dispatcher = ModeDispatcher(self.network)
+        self.genome = genome if genome is not None else Genome.default()
+        arch = self.genome.architecture
+        learning = self.genome.learning
+        self.history_len = arch.history_len
+        self.label_step_penalty = learning.gene("label_step_penalty").value
+        self.train_every_n_foods = learning.gene("train_every_n_foods").value
+        self.experience_keep_fraction = learning.gene("experience_keep_fraction").value
+        rng = birth_rng if birth_rng is not None else random.Random()
+        decision = decide_birth(self.genome, rng)
+        self.birth_source = decision.source
+        input_size = arch.shapes()[0][0]
+        self.network = FoodPolicyNetwork(
+            hidden_1=arch.hidden_1,
+            hidden_2=arch.hidden_2,
+            input_size=input_size,
+            weights=decision.weights,
+        )
+        self.genome.store_birth_weights(self.network.model.get_weights())
+        self.dispatcher = ModeDispatcher(self.network, behavior_block=self.genome.behavior)
         self._sync_mode()
         self.food_total = 0
         self.foods_since_train = 0
@@ -196,8 +211,8 @@ class NeuralFoodAgent(BaseAgent):
         return super().begin_attempt(radar)
 
     def act(self, radar: RadarReading, state: Optional[dict] = None) -> int:
-        past = self.history.recent(HISTORY_LEN - 1)
-        features = history_features_from_steps(past, radar, HISTORY_LEN)
+        past = self.history.recent(self.history_len - 1)
+        features = history_features_from_steps(past, radar, self.history_len)
         action = self.dispatcher.choose_action(features)
         self._sync_mode()
         return action
@@ -235,7 +250,7 @@ class NeuralFoodAgent(BaseAgent):
         if attempt.outcome == AttemptOutcome.SUCCESS:
             self.food_total += 1
             self.foods_since_train += 1
-            if self.foods_since_train >= TRAIN_EVERY_N_FOODS:
+            if self.foods_since_train >= self.train_every_n_foods:
                 self._maybe_request_training()
 
         if attempt.outcome == AttemptOutcome.FAILURE:
@@ -243,7 +258,11 @@ class NeuralFoodAgent(BaseAgent):
                 self._maybe_request_training()
 
     def _sample_count(self) -> int:
-        x, _ = attempts_to_dataset(self.attempt_history.all())
+        x, _ = attempts_to_dataset(
+            self.attempt_history.all(),
+            self.history_len,
+            self.label_step_penalty,
+        )
         return len(x)
 
     def _maybe_request_training(self) -> None:
@@ -259,7 +278,11 @@ class NeuralFoodAgent(BaseAgent):
 
         self._pending_train = False
         attempts = self.attempt_history.all()
-        x, _ = attempts_to_dataset(attempts)
+        x, _ = attempts_to_dataset(
+            attempts,
+            self.history_len,
+            self.label_step_penalty,
+        )
         if len(x) < TRAIN_MIN_SAMPLES:
             self.dispatcher.set_neural()
             self._sync_mode()
@@ -267,12 +290,16 @@ class NeuralFoodAgent(BaseAgent):
 
         self.dispatcher.set_training()
         self._sync_mode()
-        result = self.network.train_on_attempts(attempts)
+        result = self.network.train_on_attempts(
+            attempts,
+            self.history_len,
+            self.label_step_penalty,
+        )
         self.last_train_samples = result.get("samples", 0)
 
-        removed_steps = self.history.keep_newest_fraction(EXPERIENCE_KEEP_FRACTION)
+        removed_steps = self.history.keep_newest_fraction(self.experience_keep_fraction)
         removed_attempts = self.attempt_history.keep_newest_fraction(
-            EXPERIENCE_KEEP_FRACTION
+            self.experience_keep_fraction
         )
         self.last_cleanup_removed = removed_steps + removed_attempts
         self.cleanup_count += 1
@@ -299,8 +326,8 @@ class NeuralFoodAgent(BaseAgent):
                 "last_cleanup_removed": self.last_cleanup_removed,
                 "food_total": self.food_total,
                 "foods_since_train": self.foods_since_train,
-                "train_every_n_foods": TRAIN_EVERY_N_FOODS,
-                "history_len": HISTORY_LEN,
+                "train_every_n_foods": self.train_every_n_foods,
+                "history_len": self.history_len,
                 "last_switch_reason": self.last_switch_reason,
                 "trainable_samples": self._cached_samples,
                 "pain_total": self.pain_total,

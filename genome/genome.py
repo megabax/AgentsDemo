@@ -49,6 +49,15 @@ class Genome:
         """Стартовые значения из config.py, снимок весов пустой, inherit_weights = 0.5."""
         return cls()
 
+    @classmethod
+    def randomized(cls, rng: random.Random) -> "Genome":
+        """Случайная особь: каждый ген внутри своей сетки, снимка весов ещё нет."""
+        genome = cls()
+        for block in genome.blocks():
+            block.randomize(rng)
+        genome.innate_weights.clear_snapshot()
+        return genome
+
     @property
     def architecture(self) -> ArchitectureBlock:
         return self._blocks["architecture"]

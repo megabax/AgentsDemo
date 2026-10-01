@@ -163,6 +163,7 @@ def label_from_reach_score(action: int, score: float) -> np.ndarray:
 def attempts_to_dataset(
     attempts: Sequence[Attempt],
     history_len: int = HISTORY_LEN,
+    penalty: float = LABEL_STEP_PENALTY,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Разметка по истории попытки (без планирования):
@@ -185,24 +186,29 @@ def attempts_to_dataset(
             if steps[i].pain:
                 score = 0.0
             else:
-                score = food_reach_score(steps_until_food(steps, i))
+                score = food_reach_score(steps_until_food(steps, i), penalty)
             xs.append(history_features_at_index(steps, i, history_len))
             ys.append(label_from_reach_score(steps[i].action, score))
 
     if not xs:
+        frame = RADAR_RAY_COUNT * 4 + NUM_ACTIONS
         return (
-            np.zeros((0, FEATURE_SIZE), dtype=np.float32),
+            np.zeros((0, history_len * frame), dtype=np.float32),
             np.zeros((0, NUM_ACTIONS), dtype=np.float32),
         )
     return np.stack(xs), np.stack(ys)
 
 
-def build_policy_model(input_size: int = FEATURE_SIZE) -> keras.Model:
+def build_policy_model(
+    input_size: int = FEATURE_SIZE,
+    hidden_1: int = NN_HIDDEN_1,
+    hidden_2: int = NN_HIDDEN_2,
+) -> keras.Model:
     model = keras.Sequential(
         [
             layers.Input(shape=(input_size,)),
-            layers.Dense(NN_HIDDEN_1, activation="relu"),
-            layers.Dense(NN_HIDDEN_2, activation="relu"),
+            layers.Dense(hidden_1, activation="relu"),
+            layers.Dense(hidden_2, activation="relu"),
             layers.Dense(NUM_ACTIONS, activation="softmax"),
         ]
     )
@@ -217,8 +223,16 @@ def build_policy_model(input_size: int = FEATURE_SIZE) -> keras.Model:
 class FoodPolicyNetwork:
     """Обёртка над Keras: предсказание по истории и обучение на +/−."""
 
-    def __init__(self):
-        self.model = build_policy_model()
+    def __init__(
+        self,
+        hidden_1: int = NN_HIDDEN_1,
+        hidden_2: int = NN_HIDDEN_2,
+        input_size: int = FEATURE_SIZE,
+        weights=None,
+    ):
+        self.model = build_policy_model(input_size, hidden_1, hidden_2)
+        if weights is not None:
+            self.model.set_weights(list(weights))
         self.train_count = 0
         self.last_loss = None
         self.last_accuracy = None
@@ -233,8 +247,13 @@ class FoodPolicyNetwork:
         idx = int(np.argmax(probs))
         return MOVEMENT_ACTIONS[idx]
 
-    def train_on_attempts(self, attempts: Sequence[Attempt]) -> dict:
-        x, y = attempts_to_dataset(attempts)
+    def train_on_attempts(
+        self,
+        attempts: Sequence[Attempt],
+        history_len: int = HISTORY_LEN,
+        penalty: float = LABEL_STEP_PENALTY,
+    ) -> dict:
+        x, y = attempts_to_dataset(attempts, history_len, penalty)
         if len(x) == 0:
             return {"samples": 0, "loss": None, "accuracy": None}
 
